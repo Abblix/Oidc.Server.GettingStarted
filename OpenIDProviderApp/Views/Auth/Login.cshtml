@@ -1,0 +1,20 @@
+﻿<!-- Login form designed for user authentication -->
+<form asp-action="Login" method="post">
+    <div>
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required />
+    </div>
+    <div>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required />
+    </div>
+    <div>
+        <!-- Display validation errors here -->
+        @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+    </div>
+    <div>
+        <!-- Hidden field to maintain request_uri during the login process -->
+        <input type="hidden" id="requestUri" name="requestUri" value="@Model.requestUri" />
+        <button type="submit">Login</button>
+    </div>
+</form>
