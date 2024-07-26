@@ -37,7 +37,7 @@ builder.Services.AddOidcServices(options => {
             },
             AllowedGrantTypes = new[] { GrantTypes.AuthorizationCode },
             ClientType = ClientType.Confidential,
-            OfflineAccessAllowed = true,
+            OfflineAccessAllowed = false,
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
             PkceRequired = true,
             RedirectUris = new[] { new Uri("https://localhost:5002/signin-oidc", UriKind.Absolute) },
