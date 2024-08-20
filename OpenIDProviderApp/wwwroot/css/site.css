@@ -20,3 +20,23 @@ html {
 body {
   margin-bottom: 60px;
 }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+.container {
+  max-width: 400px;
+  margin: auto;
+}
+
+.content-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.flex-fill {
+  flex: 1 0 auto;
+}
