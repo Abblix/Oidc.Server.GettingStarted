@@ -1,7 +1,9 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.Features.UserInfo;
+
+namespace OpenIDProviderApp;
 
 /// <summary>
 /// Represents user information, including subject identifier and profile attributes like name and email.
@@ -64,9 +66,9 @@ public class TestUserStorage(params UserInfo[] users) : IUserInfoProvider
     /// <param name="subject">When this method returns, contains the subject identifier of the authenticated user if the return value is true; otherwise, null.</param>
     /// <returns>true if the authentication is successful; otherwise, false.</returns>
     public bool TryAuthenticate(
-         string email,
-         string password,
-         [NotNullWhen(true)] out string? subject)
+        string email,
+        string password,
+        [NotNullWhen(true)] out string? subject)
     {
         foreach (var user in users)
         {
