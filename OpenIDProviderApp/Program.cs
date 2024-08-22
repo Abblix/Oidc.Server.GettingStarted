@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Abblix.DependencyInjection;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.Common.Constants;
@@ -5,8 +7,7 @@ using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.Mvc;
 using Microsoft.IdentityModel.Tokens;
-using System.Security.Cryptography;
-using System.Text;
+using OpenIDProviderApp;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,32 +28,46 @@ builder.Services.AddAlias<IUserInfoProvider, TestUserStorage>();
 builder.Services.AddControllersWithViews();
 
 // Register and configure Abblix OIDC Server
-builder.Services.AddOidcServices(options => {
+builder.Services.AddOidcServices(options =>
+{
+    // options.Scopes = [new ScopeDefinition(...)];
+    options.Resources =
+    [
+        new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
+    ];
     options.Clients = new[] {
         new ClientInfo("test_client") {
-            ClientSecrets = new[] {
-                new ClientSecret {
-                    Sha512Hash = SHA512.HashData(Encoding.ASCII.GetBytes("secret")),
-                }
-            },
-            AllowedGrantTypes = new[] { GrantTypes.AuthorizationCode },
-            ClientType = ClientType.Confidential,
-            OfflineAccessAllowed = false,
+            ClientSecrets = [new ClientSecret { Sha512Hash = ToSha512Hash("secret") }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
+            AllowedGrantTypes = [GrantTypes.AuthorizationCode],
+            ClientType = ClientType.Confidential,
+            OfflineAccessAllowed = true,
             PkceRequired = true,
-            RedirectUris = new[] { new Uri("https://localhost:5002/signin-oidc", UriKind.Absolute) },
-            PostLogoutRedirectUris = new[] { new Uri("https://localhost:5002/signout-callback-oidc", UriKind.Absolute) },
+            RedirectUris = [new Uri("https://localhost:5002/signin-oidc", UriKind.Absolute)],
+            PostLogoutRedirectUris = [new Uri("https://localhost:5002/signout-callback-oidc", UriKind.Absolute)],
+        },
+        new ClientInfo("bff_sample") {
+            ClientSecrets = [new ClientSecret { Sha512Hash = ToSha512Hash("secret") }],
+            TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
+            AllowedGrantTypes = [GrantTypes.AuthorizationCode],
+            ClientType = ClientType.Confidential,
+            OfflineAccessAllowed = true,
+            PkceRequired = true,
+            RedirectUris = [new Uri("https://localhost:5003/signin-oidc", UriKind.Absolute)],
+            PostLogoutRedirectUris = [new Uri("https://localhost:5003/signout-callback-oidc", UriKind.Absolute)],
         }
     };
-    options.LoginUri = new Uri($"/Auth/Login", UriKind.Relative);
+    options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);
     options.SigningKeys = new[] { JsonWebKeyFactory.CreateRsa(JsonWebKeyUseNames.Sig) };
 });
 
+// Add authentication services
 builder.Services
     .AddAuthentication()
     .AddCookie();
 
-builder.Services.AddDistributedMemoryCache();
+builder.Services
+    .AddDistributedMemoryCache();
 
 var app = builder.Build();
 
@@ -69,7 +84,6 @@ app.UseStaticFiles();
 
 app.UseRouting();
 app.UseCors();
-app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
@@ -77,3 +91,6 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
+return;
+
+static byte[] ToSha512Hash(string source) => SHA512.HashData(Encoding.UTF8.GetBytes(source));

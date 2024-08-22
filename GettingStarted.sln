@@ -7,6 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenIDProviderApp", "OpenID
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestClientApp", "TestClientApp\TestClientApp.csproj", "{8823E96F-8CA3-437E-878F-60A5501C6297}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BffSample", "BffSample\BffSample.csproj", "{347D07DE-3BBD-47B1-87C9-8DAC84C70ABB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiSample", "ApiSample\ApiSample.csproj", "{71B5C64F-E15A-46D5-BA93-EA5E49880BC5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +28,13 @@ Global
 		{8823E96F-8CA3-437E-878F-60A5501C6297}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8823E96F-8CA3-437E-878F-60A5501C6297}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8823E96F-8CA3-437E-878F-60A5501C6297}.Release|Any CPU.Build.0 = Release|Any CPU
+		{347D07DE-3BBD-47B1-87C9-8DAC84C70ABB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{347D07DE-3BBD-47B1-87C9-8DAC84C70ABB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{347D07DE-3BBD-47B1-87C9-8DAC84C70ABB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{347D07DE-3BBD-47B1-87C9-8DAC84C70ABB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71B5C64F-E15A-46D5-BA93-EA5E49880BC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71B5C64F-E15A-46D5-BA93-EA5E49880BC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71B5C64F-E15A-46D5-BA93-EA5E49880BC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71B5C64F-E15A-46D5-BA93-EA5E49880BC5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
