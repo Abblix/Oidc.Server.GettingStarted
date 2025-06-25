@@ -35,7 +35,8 @@ builder.Services.AddOidcServices(options =>
     [
         new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
     ];
-    options.Clients = new[] {
+    options.Clients =
+    [
         new ClientInfo("test_client") {
             ClientSecrets = [new ClientSecret { Sha512Hash = ToSha512Hash("secret") }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
@@ -56,9 +57,9 @@ builder.Services.AddOidcServices(options =>
             RedirectUris = [new Uri("https://localhost:5003/signin-oidc", UriKind.Absolute)],
             PostLogoutRedirectUris = [new Uri("https://localhost:5003/signout-callback-oidc", UriKind.Absolute)],
         }
-    };
+    ];
     options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);
-    options.SigningKeys = new[] { JsonWebKeyFactory.CreateRsa(JsonWebKeyUseNames.Sig) };
+    options.SigningKeys = [JsonWebKeyFactory.CreateRsa(JsonWebKeyUseNames.Sig)];
 });
 
 // Add authentication services
