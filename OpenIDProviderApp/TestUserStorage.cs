@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 using Abblix.Jwt;
+using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 
 namespace OpenIDProviderApp;
@@ -16,11 +17,11 @@ public record UserInfo(string Subject, string Name, string Email, string Passwor
 public class TestUserStorage(params UserInfo[] users) : IUserInfoProvider
 {
     /// <summary>
-    /// Asynchronously retrieves user information based on a subject identifier and a collection of requested claims.
+    /// Asynchronously retrieves user information based on an authentication session and a collection of requested claims.
     /// </summary>
-    public Task<JsonObject?> GetUserInfoAsync(string subject, IEnumerable<string> requestedClaims)
+    public Task<JsonObject?> GetUserInfoAsync(AuthSession authSession, IEnumerable<string> requestedClaims)
     {
-        var userInfo = GetUserInfo(subject, requestedClaims);
+        var userInfo = GetUserInfo(authSession.Subject, requestedClaims);
         return Task.FromResult(userInfo);
     }
 
