@@ -110,3 +110,4 @@ out/
 
 # Ignore JetBrains project files
 .idea/
+*.cmd
