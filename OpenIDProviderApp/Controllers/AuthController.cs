@@ -66,6 +66,6 @@ public class AuthController: Controller
         await authService.SignInAsync(authSession);
 
         // Redirect the user to the authorization endpoint URL, recovering the OIDC flow
-        return Redirect($"{Abblix.Oidc.Server.Mvc.Path.Authorize}?request_uri={HttpUtility.UrlEncode(requestUri)}");
+        return Redirect($"/connect/authorize?request_uri={HttpUtility.UrlEncode(requestUri)}");
     }
 }
