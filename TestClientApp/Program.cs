@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -7,8 +10,8 @@ var configuration = builder.Configuration;
 
 builder.Services
     .AddAuthentication(options => configuration.Bind("Authentication", options))
-    .AddCookie()
-    .AddOpenIdConnect(options => configuration.Bind("OpenIdConnect", options));
+    .AddCookie(options => configuration.Bind(CookieAuthenticationDefaults.AuthenticationScheme, options))
+    .AddOpenIdConnect(options => configuration.Bind(OpenIdConnectDefaults.AuthenticationScheme, options));
 
 var app = builder.Build();
 
