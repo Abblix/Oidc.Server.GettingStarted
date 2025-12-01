@@ -20,11 +20,14 @@
 // CONTACT: For license inquiries or permissions, contact Abblix LLP at
 // info@abblix.com
 
-using System.Web;
 using Abblix.Oidc.Server.Features.RandomGenerators;
 using Abblix.Oidc.Server.Features.UserAuthentication;
+using Abblix.Oidc.Server.Model;
+using Abblix.Oidc.Server.Mvc;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Path = Abblix.Oidc.Server.Mvc.Path;
+using UriBuilder = Abblix.Utils.UriBuilder;
 
 namespace OpenIDProviderApp.Controllers;
 
@@ -42,6 +45,7 @@ public class AuthController: Controller
     public async Task<IActionResult> Login(
         [FromServices] IAuthSessionService authService,
         [FromServices] ISessionIdGenerator sessionIdGenerator,
+        [FromServices] IUriResolver uriResolver,
         [FromServices] TestUserStorage userStorage,
         [FromForm] string email,
         [FromForm] string password,
@@ -66,6 +70,8 @@ public class AuthController: Controller
         await authService.SignInAsync(authSession);
 
         // Redirect the user to the authorization endpoint URL, recovering the OIDC flow
-        return Redirect($"/connect/authorize?request_uri={HttpUtility.UrlEncode(requestUri)}");
+        var authorizeUrl = new UriBuilder(uriResolver.Content(Path.Authorize))
+            { Query = { [AuthorizationRequest.Parameters.RequestUri] = requestUri } };
+        return Redirect(authorizeUrl);
     }
 }
