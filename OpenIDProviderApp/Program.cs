@@ -38,21 +38,19 @@ builder.Services.AddOidcServices(options =>
     options.Clients =
     [
         new ClientInfo("test_client") {
-            ClientSecrets = [new ClientSecret { Sha512Hash = ToSha512Hash("secret") }],
+            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
             AllowedGrantTypes = [GrantTypes.AuthorizationCode],
             ClientType = ClientType.Confidential,
-            OfflineAccessAllowed = true,
             PkceRequired = true,
             RedirectUris = [new Uri("https://localhost:5002/signin-oidc", UriKind.Absolute)],
             PostLogoutRedirectUris = [new Uri("https://localhost:5002/signout-callback-oidc", UriKind.Absolute)],
         },
         new ClientInfo("bff_sample") {
-            ClientSecrets = [new ClientSecret { Sha512Hash = ToSha512Hash("secret") }],
+            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
             AllowedGrantTypes = [GrantTypes.AuthorizationCode],
             ClientType = ClientType.Confidential,
-            OfflineAccessAllowed = true,
             PkceRequired = true,
             RedirectUris = [new Uri("https://localhost:5003/signin-oidc", UriKind.Absolute)],
             PostLogoutRedirectUris = [new Uri("https://localhost:5003/signout-callback-oidc", UriKind.Absolute)],
@@ -92,6 +90,3 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
-return;
-
-static byte[] ToSha512Hash(string source) => SHA512.HashData(Encoding.UTF8.GetBytes(source));
