@@ -1,5 +1,5 @@
 import React from 'react';
-import { useBff } from './bff';
+import { useBff } from './Bff';
 
 export const UserClaims: React.FC = () => {
     const { user } = useBff();
