@@ -75,6 +75,17 @@ cd Oidc.Server.GettingStarted
 dotnet restore
 dotnet build
 ```
+## 🤝 Contributing
+
+If you plan to send a pull request, set up local pre-commit hooks once:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+After this, `git commit` automatically runs `actionlint` and a custom secrets-interpolation check on any change to `.github/workflows/`. The same checks run in CI as a backstop.
+
 ## 📃 License
 
 This project is licensed under the Creative Commons Attribution 4.0 International License. You can review the full license text at the following link: [CC BY 4.0 License](https://creativecommons.org/licenses/by/4.0/).
