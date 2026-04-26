@@ -22,7 +22,7 @@ export const WeatherForecast: React.FC = () => {
         fetchBff('weatherforecast')
             .then(response => response.json())
             .then(data => setState({forecasts: data, loading: false}));
-    }, []);
+    }, [fetchBff]);
 
 
     const contents = loading

@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, FC } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode, FC } from 'react';
+
+type UserClaims = Record<string, unknown>;
 
 // Define the shape of the BFF context
 interface BffContextProps {
-    user: any;
+    user: UserClaims | null;
     fetchBff: (endpoint: string, options?: RequestInit) => Promise<Response>;
     checkSession: () => Promise<void>;
     login: () => void;
@@ -24,33 +26,34 @@ interface BffProviderProps {
 }
 
 export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<UserClaims | null>(null);
 
     // Normalize the base URL by removing a trailing slash to avoid inconsistent URLs
-    if (baseUrl.endsWith('/')) {
-        baseUrl = baseUrl.slice(0, -1);
-    }
+    const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
-    const fetchBff = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
-        try {
-            // The fetch function includes credentials to handle cookies, which are necessary for authentication
-            return await fetch(`${baseUrl}/${endpoint}`, {
-                credentials: 'include',
-                ...options
-            });
-        } catch (error) {
-            console.error(`Error during ${endpoint} call:`, error);
-            throw error;
-        }
-    };
+    const fetchBff = useCallback(
+        async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
+            try {
+                // The fetch function includes credentials to handle cookies, which are necessary for authentication
+                return await fetch(`${normalizedBaseUrl}/${endpoint}`, {
+                    credentials: 'include',
+                    ...options
+                });
+            } catch (error) {
+                console.error(`Error during ${endpoint} call:`, error);
+                throw error;
+            }
+        },
+        [normalizedBaseUrl]
+    );
 
     // The login function redirects to the login page when user needs to authenticate
-    const login = (): void => {
-        window.location.replace(`${baseUrl}/login`);
-    };
+    const login = useCallback((): void => {
+        window.location.replace(`${normalizedBaseUrl}/login`);
+    }, [normalizedBaseUrl]);
 
     // The checkSession function is responsible for verifying the user session on initial render
-    const checkSession = async (): Promise<void> => {
+    const checkSession = useCallback(async (): Promise<void> => {
         const response = await fetchBff('check_session');
 
         if (response.ok) {
@@ -62,10 +65,10 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
         } else {
             console.error('Unexpected response from checking session:', response);
         }
-    };
+    }, [fetchBff, login]);
 
     // Function to log out the user
-    const logout = async (): Promise<void> => {
+    const logout = useCallback(async (): Promise<void> => {
         const response = await fetchBff('logout', { method: 'POST' });
 
         if (response.ok) {
@@ -74,11 +77,11 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
         } else {
             console.error('Logout failed:', response);
         }
-    };
+    }, [fetchBff]);
 
     // useEffect is used to run the checkSession function once the component mounts
     // This ensures the session is checked immediately when the app loads
-    useEffect(() => { checkSession(); }, []);
+    useEffect(() => { checkSession(); }, [checkSession]);
 
     return (
         // Providing the BFF context with relevant values and functions to be used across the application
@@ -90,9 +93,3 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
 
 // Custom hook to use the BFF context easily in other components
 export const useBff = (): BffContextProps => useContext(BffContext);
-
-// Export HOC to provide access to BFF Context
-export const withBff = (Component: React.ComponentType<any>) => (props: any) =>
-    <BffContext.Consumer>
-        {context => <Component {...props} bffContext={context} />}
-    </BffContext.Consumer>;
