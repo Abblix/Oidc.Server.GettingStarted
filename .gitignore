@@ -111,3 +111,6 @@ out/
 # Ignore JetBrains project files
 .idea/
 *.cmd
+
+# Local AI/dev guidance — kept untracked, mirrors policy in Docs/AuthSvc/Oidc.Server
+**/CLAUDE.md
