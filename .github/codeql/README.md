@@ -2,30 +2,26 @@
 
 **Current state: DISABLED.** This repository does not run CodeQL.
 
-In May 2026, CodeQL consumed 824 GHA minutes across the Abblix org (52% of total budget) before being disabled. This directory holds dormant config so that if CodeQL is reactivated, the scan is constrained from the start.
+In May 2026, CodeQL via GitHub-managed Default Setup consumed 824 GHA minutes across the Abblix org (52% of total budget) before being disabled. This directory holds dormant scan-scope config so that if CodeQL is reactivated, the analysis is constrained from the start.
 
 ## Files
 
-- `codeql-config.yml` — scan scope: `security-and-quality` query suite, paths-ignore for tests/build outputs/vendored code. Applies automatically to both Default Setup and custom workflows when CodeQL is enabled.
+- `codeql-config.yml` — scan scope: `security-and-quality` query suite, paths-ignore for tests/build outputs/vendored code. Referenced by `config-file:` in either Default Setup or a custom workflow.
 
-## Re-enable with restricted triggers (Рычаг 2)
+## Re-enable
 
-If CodeQL needs to come back (e.g. compliance audit, security review), enable it via API with the following parameters — never click "Enable Default Setup" in the UI without this configuration, which defaults to high-volume triggers.
+GitHub-managed Default Setup cannot disable the weekly schedule or PR-trigger via API — `state=configured` always pairs with hardcoded triggers. **Prefer a custom workflow** at `.github/workflows/codeql.yml` for trigger control. See the active example in `Abblix/Oidc.Server` for the exact shape (push-to-default-branch + workflow_dispatch only, references this `codeql-config.yml`).
+
+If Default Setup is acceptable (with the wider trigger set), enable it via:
 
 ```bash
-# Replace <REPO> with the repository name (e.g. Oidc.Server)
 gh api -X PATCH "repos/Abblix/<REPO>/code-scanning/default-setup" \
   -f state=configured \
   -f query_suite=default \
-  -F 'languages[]=csharp' \
-  -f schedule=none
+  -F 'languages[]=csharp'
 ```
 
-Key parameters:
-
-- `query_suite=default` — pairs with the local `codeql-config.yml`. (`extended` adds ~2x runtime.)
-- `schedule=none` — disables the weekly auto-scan that fires regardless of code changes. Combined with branch protection (push to default branch only), this trims trigger volume by ~50-70%.
-- `languages[]=csharp` — explicit language list. Default Setup auto-detects all languages; pinning to `csharp` skips any incidental JS/HTML scanning.
+The `query_suite=default` setting pairs with this `codeql-config.yml` to keep the lighter query set + path exclusions.
 
 ## Verify current state
 
@@ -34,13 +30,13 @@ gh api "repos/Abblix/<REPO>/code-scanning/default-setup" --jq .state
 # expected: "not-configured"
 ```
 
-## Disable again
+## Disable again (Default Setup)
 
 ```bash
 gh api -X PATCH "repos/Abblix/<REPO>/code-scanning/default-setup" \
   -f state=not-configured
 ```
 
-## Why "Code Quality" workflow names map to CodeQL
+## Why "Code Quality" workflow names in history map to CodeQL
 
-In Actions UI, CodeQL Default Setup runs appear as `Code Quality: Push on develop`, `Code Quality: PR #N`, `Code Quality: Scheduled`, etc. The underlying workflow path is `dynamic/github-code-scanning/codeql` (not editable). Despite the "Code Quality" label, there is no SonarCloud or other linter — it is purely CodeQL.
+In the Actions UI, CodeQL **Default Setup** runs appeared as `Code Quality: Push on develop`, `Code Quality: PR #N`, `Code Quality: Scheduled`. The underlying workflow path was `dynamic/github-code-scanning/codeql` (not editable). Despite the "Code Quality" label, there is no SonarCloud or other linter — it is purely CodeQL.
