@@ -1,11 +1,10 @@
 name: Lint workflows
 
 on:
+  # No paths filter on pull_request: both jobs are required status checks on
+  # master, and a path-filtered required check never reports on out-of-scope
+  # PRs, leaving them permanently unmergeable. The jobs cost ~1 minute per PR.
   pull_request:
-    paths:
-      - '.github/workflows/**'
-      - '.github/scripts/lint-no-inline-secrets.py'
-      - '.github/codeql/**'
   push:
     branches: [master, develop]
   workflow_dispatch:
