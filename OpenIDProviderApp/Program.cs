@@ -51,6 +51,14 @@ builder.Services.AddOidcServices(options =>
             PkceRequired = true,
             RedirectUris = [new Uri("https://localhost:5003/signin-oidc", UriKind.Absolute)],
             PostLogoutRedirectUris = [new Uri("https://localhost:5003/signout-callback-oidc", UriKind.Absolute)],
+        },
+        new ClientInfo("blazor_sample") {
+            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
+            TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
+            AllowedGrantTypes = [GrantTypes.AuthorizationCode],
+            PkceRequired = true,
+            RedirectUris = [new Uri("https://localhost:5005/signin-oidc", UriKind.Absolute)],
+            PostLogoutRedirectUris = [new Uri("https://localhost:5005/signout-callback-oidc", UriKind.Absolute)],
         }
     ];
     options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);

@@ -1,0 +1,27 @@
+@page "/"
+
+<PageTitle>Blazor OIDC client</PageTitle>
+
+<h1>Blazor client for Abblix OIDC Server</h1>
+
+<AuthorizeView>
+    <Authorized>
+        <p>Signed in as <strong>@context.User.Identity?.Name</strong>.</p>
+
+        <h2>Claims</h2>
+        <ul>
+            @foreach (var claim in context.User.Claims)
+            {
+                <li>@claim.Type: @claim.Value</li>
+            }
+        </ul>
+
+        @* data-enhance-nav="false" forces a real browser navigation so the redirect that
+           clears the cookie is followed by the browser, not by enhanced navigation. *@
+        <p><a href="/auth/logout" data-enhance-nav="false">Sign out</a></p>
+    </Authorized>
+    <NotAuthorized>
+        <p>You are not signed in.</p>
+        <p><a href="/auth/login" data-enhance-nav="false">Sign in</a></p>
+    </NotAuthorized>
+</AuthorizeView>

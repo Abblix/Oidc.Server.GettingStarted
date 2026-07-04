@@ -42,6 +42,9 @@ The `TestClientApp` functions as the Relying Party, acting as a client that depe
 - **BffSample**  
 The `BffSample` implements the Backend-For-Frontend (BFF) architectural pattern to improve the security and manageability of interactions between a Single Page Application (SPA) and its backend services. The BFF acts as an intermediary, handling authentication and session management on behalf of the SPA, thereby reducing the surface area for attacks and simplifying client-side code. This sample is designed to showcase how to effectively apply the BFF pattern in a .NET environment, leveraging modern security practices and enhancing the overall security posture of web applications.
 
+- **BlazorSample**  
+The `BlazorSample` is a Blazor Web App (interactive Server render mode) acting as an OpenID Connect client of the `OpenIDProviderApp`. It shows the pattern that keeps Blazor and OIDC working together: the pages are rendered by Blazor, but sign-in and sign-out run on plain HTTP endpoints rather than inside an interactive circuit, because writing the authentication cookie and issuing the OIDC redirect both need the HTTP response. The sample uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` with cookie sessions, the authorization code flow and PKCE.
+
 - **ApiSample**  
 The `ApiSample` demonstrates how to build a secure backend API that works in conjunction with an OpenID Connect provider to authenticate and authorize client requests. This sample illustrates the integration of security protocols like OAuth 2.0 and OpenID Connect into API development, ensuring that only authenticated and authorized users can access protected resources. The `ApiSample` serves as a practical guide for implementing secure APIs that comply with modern authentication standards, providing a robust foundation for securing backend services in a distributed web application architecture.
 
