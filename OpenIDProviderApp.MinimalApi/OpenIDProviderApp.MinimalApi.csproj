@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- TODO: switch to PackageReference Abblix.Oidc.Server.MinimalApi once the adapter ships on NuGet.
+         Until then the project builds against the Oidc.Server sources from a sibling checkout. -->
+    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server\Abblix.Oidc.Server.csproj" />
+    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.MinimalApi\Abblix.Oidc.Server.MinimalApi.csproj" />
+  </ItemGroup>
+
+</Project>
