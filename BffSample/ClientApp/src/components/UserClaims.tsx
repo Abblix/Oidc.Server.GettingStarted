@@ -5,17 +5,20 @@ export const UserClaims: React.FC = () => {
     const { user } = useBff();
 
     if (!user)
-        return <div>Checking user session...</div>;
+        return <p className="status">Checking your session...</p>;
 
     return (
         <>
-            <h2>User Claims</h2>
-            <p>This component displays claims received from the OpenID Connect server.</p>
-            {Object.entries(user).map(([claim, value]) => (
-                <div key={claim}>
-                    <strong>{claim}</strong>: {String(value)}
-                </div>
-            ))}
+            <h2>Your session</h2>
+            <p className="hint">Claims the SPA reads through the BFF, never from a token in the browser.</p>
+            <dl className="claims">
+                {Object.entries(user).map(([claim, value]) => (
+                    <React.Fragment key={claim}>
+                        <dt>{claim}</dt>
+                        <dd>{String(value)}</dd>
+                    </React.Fragment>
+                ))}
+            </dl>
         </>
     );
 };

@@ -79,8 +79,9 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
         }
     }, [fetchBff]);
 
-    // useEffect is used to run the checkSession function once the component mounts
-    // This ensures the session is checked immediately when the app loads
+    // Run the session check once on mount. checkSession sets state only after an awaited
+    // fetch, so this is not the synchronous render cascade the set-state-in-effect rule guards.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { checkSession(); }, [checkSession]);
 
     return (
