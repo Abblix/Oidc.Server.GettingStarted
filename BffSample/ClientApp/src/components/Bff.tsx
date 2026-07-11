@@ -8,7 +8,7 @@ interface BffContextProps {
     fetchBff: (endpoint: string, options?: RequestInit) => Promise<Response>;
     checkSession: () => Promise<void>;
     login: () => void;
-    logout: () => Promise<void>;
+    logout: () => void;
 }
 
 // Creating a context for BFF to share state and functions across the application
@@ -17,7 +17,7 @@ const BffContext = createContext<BffContextProps>({
     fetchBff: async () => new Response(),
     checkSession: async () => {},
     login: () => {},
-    logout: async () => {}
+    logout: () => {}
 });
 
 interface BffProviderProps {
@@ -67,17 +67,11 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
         }
     }, [fetchBff, login]);
 
-    // Function to log out the user
-    const logout = useCallback(async (): Promise<void> => {
-        const response = await fetchBff('logout', { method: 'POST' });
-
-        if (response.ok) {
-            // Redirect to the home page after successful logout
-            window.location.replace('/');
-        } else {
-            console.error('Logout failed:', response);
-        }
-    }, [fetchBff]);
+    // Full RP-initiated logout: navigate the browser to /bff/logout so it can follow the
+    // redirect to the provider's end-session endpoint and back. A fetch cannot navigate the page.
+    const logout = useCallback((): void => {
+        window.location.href = `${normalizedBaseUrl}/logout`;
+    }, [normalizedBaseUrl]);
 
     // Run the session check once on mount. checkSession sets state only after an awaited
     // fetch, so this is not the synchronous render cascade the set-state-in-effect rule guards.
