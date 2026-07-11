@@ -119,3 +119,6 @@ out/
 
 # Local AI/dev guidance — kept untracked, mirrors policy in Docs/AuthSvc/Oidc.Server
 **/CLAUDE.md
+
+# ASP.NET Data Protection key ring (runtime, sample)
+dataprotection-keys/
