@@ -130,13 +130,20 @@ using (var scope = app.Services.CreateScope())
             Email = "john.doe@example.com",
             EmailConfirmed = true,
         };
-        var created = await users.CreateAsync(user, "Jd!2024$3cur3");
+        // Generate the seed password instead of hardcoding one: nothing sensitive lands in source,
+        // and Identity stores only its salted PBKDF2 hash, never the plaintext.
+        var password = GeneratePassword();
+        var created = await users.CreateAsync(user, password);
         if (!created.Succeeded)
             throw new InvalidOperationException(string.Join("; ", created.Errors.Select(e => e.Description)));
 
         // profile claims Identity does not model live in its claim store:
         // the IdentityUserInfoProvider surfaces them when the profile scope asks
         await users.AddClaimAsync(user, new Claim("name", "John Doe"));
+
+#warning DEV convenience only: even on the console this credential reaches container stdout and any log sink scraping it. A real deployment never surfaces a password: seed with no usable password and email a reset link, or force a change on first login.
+        // Show the generated password once, on the console, so the sample is runnable out of the box.
+        Console.WriteLine($"Seeded john.doe@example.com with a one-time generated password: {password}");
     }
 
     // Seed the OIDC store so the sample runs out of the box: a signing key that survives restarts,
@@ -203,3 +210,31 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
+
+// Builds a cryptographically random password that satisfies the default Identity policy: one
+// character guaranteed from each required class (upper, lower, digit, non-alphanumeric), the rest
+// drawn from the full set, then shuffled so the guaranteed characters are not always in front.
+static string GeneratePassword()
+{
+    const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const string lower = "abcdefghijkmnpqrstuvwxyz";
+    const string digits = "23456789";
+    const string special = "!@#$%^&*-_";
+    const string all = upper + lower + digits + special;
+
+    var chars = new char[16];
+    chars[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+    chars[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+    chars[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+    chars[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+    for (var i = 4; i < chars.Length; i++)
+        chars[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
+
+    for (var i = chars.Length - 1; i > 0; i--)
+    {
+        var j = RandomNumberGenerator.GetInt32(i + 1);
+        (chars[i], chars[j]) = (chars[j], chars[i]);
+    }
+
+    return new string(chars);
+}
