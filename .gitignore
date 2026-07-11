@@ -91,6 +91,8 @@ out/
 
 # Ignore SQLite database files
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 
 # Ignore web service configuration
