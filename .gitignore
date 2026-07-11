@@ -83,6 +83,9 @@ dist/
 build/
 out/
 
+# Client-side libraries are loaded from CDN in every sample: never vendor them into git
+**/wwwroot/lib/
+
 # Ignore compiled JavaScript files
 *.js.map
 
