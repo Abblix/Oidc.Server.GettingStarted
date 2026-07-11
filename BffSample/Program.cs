@@ -11,7 +11,9 @@ var configuration = builder.Configuration;
 builder.Services
     .AddAuthorization()
     .AddAuthentication(options => configuration.Bind("Authentication", options))
-    .AddCookie()
+    // Cookie hardening required of a BFF by draft-ietf-oauth-browser-based-apps section 6.1.3
+    // is configured under the "Cookies" section: __Host- name, Secure, HttpOnly, SameSite=Strict.
+    .AddCookie(options => configuration.Bind("Cookies", options))
     .AddOpenIdConnect(options => configuration.Bind("OpenIdConnect", options));
 
 builder.Services.AddControllers();
@@ -65,10 +67,12 @@ app.MapForwarder(
         builderContext.AddPathRemovePrefix("/bff");
         builderContext.AddRequestTransform(async transformContext =>
         {
-            // Get the access token received earlier during the authentication process
-            var accessToken = await transformContext.HttpContext.GetTokenAsync(OpenIdConnectParameterNames.AccessToken);
+            // Strip the session cookie before forwarding: the resource server authenticates on the
+            // bearer token alone and must never see the BFF's session (draft section 6.1.1, step K).
+            transformContext.ProxyRequest.Headers.Remove("Cookie");
 
-            // Append a header with access token to the proxy request
+            // Attach the access token kept in the session, so it never reaches the browser.
+            var accessToken = await transformContext.HttpContext.GetTokenAsync(OpenIdConnectParameterNames.AccessToken);
             transformContext.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         });
     }).RequireAuthorization();

@@ -3,7 +3,7 @@ using System.Security.Claims;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Swagger/OpenAPI with an interactive UI for exploring the protected endpoint in development.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

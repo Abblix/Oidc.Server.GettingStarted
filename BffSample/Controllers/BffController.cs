@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,10 +30,12 @@ public class BffController : Controller
         return Challenge(new AuthenticationProperties { RedirectUri = Url.Content("~/") });
     }
 
-    [HttpPost("logout")]
-    public IActionResult Logout()
-    {
-        // Logic to handle logging out the user
-        return SignOut();
-    }
+    // GET so the browser can navigate here: RP-initiated logout needs a top-level redirect to the
+    // provider's end-session endpoint, which a fetch cannot perform. SameSite=Strict keeps a
+    // cross-site GET from carrying the session cookie, so there is no CSRF logout.
+    [HttpGet("logout")]
+    public IActionResult Logout() => SignOut(
+        new AuthenticationProperties { RedirectUri = "/" },
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        OpenIdConnectDefaults.AuthenticationScheme);
 }

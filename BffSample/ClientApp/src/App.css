@@ -1,42 +1,104 @@
-#root {
-  max-width: 1280px;
+.app {
+  max-width: 820px;
   margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  padding: 1.5rem 1.25rem 3rem;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.app-header h1 {
+  margin: 0;
+  font-size: 1.25rem;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.app-header .subtitle {
+  color: var(--muted);
+  font-size: .85rem;
+}
+
+.logout-button {
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.logout-button:hover {
+  filter: none;
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 
 .card {
-  padding: 2em;
+  margin-bottom: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
-.read-the-docs {
-  color: #888;
+.card h2 {
+  margin: 0 0 .25rem;
+  font-size: 1.05rem;
+}
+
+.card .hint {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: .85rem;
+}
+
+.claims {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: .35rem 1.25rem;
+  margin: 0;
+  font-size: .9rem;
+  overflow-wrap: anywhere;
+}
+
+.claims dt {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.claims dd {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+}
+
+.table th,
+.table td {
+  padding: .5rem .75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.status {
+  color: var(--muted);
+  font-size: .9rem;
 }
