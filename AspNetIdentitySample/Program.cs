@@ -33,6 +33,11 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>()
     .AddSignInManager();
 
+// Password-hashing work factor: Identity's default hasher here is PBKDF2-HMAC-SHA512. Bind
+// IterationCount from appsettings.json so it can be raised to meet current OWASP guidance for that
+// algorithm without a recompile.
+builder.Services.Configure<PasswordHasherOptions>(builder.Configuration.GetSection("PasswordHasher"));
+
 // The library ships no IUserInfoProvider: this registration is mandatory, not optional.
 builder.Services.AddScoped<IUserInfoProvider, IdentityUserInfoProvider>();
 
