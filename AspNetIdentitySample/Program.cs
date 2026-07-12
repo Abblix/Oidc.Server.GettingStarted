@@ -144,6 +144,14 @@ using (var scope = app.Services.CreateScope())
 #warning DEV convenience only: even on the console this credential reaches container stdout and any log sink scraping it. A real deployment never surfaces a password: seed with no usable password and email a reset link, or force a change on first login.
         // Show the generated password once, on the console, so the sample is runnable out of the box.
         Console.WriteLine($"Seeded john.doe@example.com with a one-time generated password: {password}");
+
+        // Pause so an operator at a terminal can copy the password before startup logs scroll it away.
+        // Skipped when stdin is not interactive (container, CI, a background run) so it never hangs a headless start.
+        if (!Console.IsInputRedirected)
+        {
+            Console.WriteLine("Copy it now, then press Enter to start the server...");
+            Console.ReadLine();
+        }
     }
 
     // Seed the OIDC store so the sample runs out of the box: a signing key that survives restarts,
