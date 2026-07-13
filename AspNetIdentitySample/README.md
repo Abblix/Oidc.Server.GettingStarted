@@ -6,7 +6,7 @@ AspNetIdentitySample is OpenIDProviderApp taken one step toward production. It k
 
 - The two seams where the library meets an external user system: an `IUserInfoProvider` adapter over Identity's `UserManager` (`IdentityUserInfoProvider`) that turns a subject into claims, and a login flow where Identity verifies the password (`CheckPasswordSignInAsync`, with hashing, failed-attempt counting, and lockout) while the library's `IAuthSessionService` issues the OpenID Connect session cookie.
 - Self-service registration: the sign-up form posts to `POST /api/auth/register`, which creates the account through `UserManager` (salted PBKDF2 hash, with the unique-email and password policy enforced), signs the user in, and returns the URL that resumes the OIDC flow. There is no seeded user.
-- A React auth UI decoupled from the server's transport: the SignIn and SignUp screens are a React and Tailwind SPA that talks to the server only through the JSON auth API. The client's TypeScript types are generated from the server's OpenAPI document, so the two cannot drift, and the same UI works whether the OIDC endpoints are wired through the MVC adapter or a Minimal API host.
+- A React auth UI decoupled from the server's transport: the SignIn and SignUp screens are a React and Tailwind SPA that talks to the server only through the JSON auth API. The client's TypeScript types are generated from the server's OpenAPI document, so the two cannot drift. This sample wires the OIDC endpoints through the Minimal API adapter (`AddOidcMinimalApi` and `app.MapOidcEndpoints()`); the same React UI and JSON auth API would drop onto an MVC host unchanged, because they depend on the seam, not the transport.
 - A durable client store in the database, so clients can be added or changed without a redeploy, and a client that registers itself through Dynamic Client Registration survives a restart.
 - Signing keys persisted to SQLite, encrypted with Data Protection, so tokens issued before a restart keep validating afterwards.
 - Security-stamp validation: the stamp snapshotted at login is compared on every request, so a password change or an explicit stamp update ends existing sessions.
@@ -22,11 +22,12 @@ From the `Oidc.Server.GettingStarted` root:
 
 On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the `test_client`. Delete the `.db` files to start from an empty store. Node.js is required: the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.
 
+Until Abblix OIDC Server 2.4 is published to nuget.org, this sample references a 2.4 dev build of `Abblix.Oidc.Server.MinimalApi` from the Abblix GitHub Packages feed (see `NuGet.config`); `dotnet restore` pulls it automatically.
+
 ## Layout
 
-- `Program.cs`: Identity + EF wiring, `AddOidcServices`, and the durable signing-key and client-store registrations.
-- `Controllers/AuthController.cs`: serves the React auth SPA for `/Auth/Login` and `/Auth/Register`, and issues the antiforgery token the SPA echoes back.
-- `Controllers/AuthApiController.cs` and `Models/AuthContracts.cs`: the JSON auth API (`/api/auth/login`, `/api/auth/register`) and its request and response contracts.
+- `Program.cs`: Identity + EF wiring, `AddOidcMinimalApi` with `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter.
+- `Models/AuthContracts.cs`: the request and response contracts for the JSON auth API.
 - `ClientApp/`: the React, TypeScript, Vite, and Tailwind auth SPA. `npm run gen:api` regenerates `src/api/schema.d.ts` from the server's OpenAPI document (refresh the snapshot with `curl -k https://localhost:5001/openapi/v1.json -o ClientApp/openapi.json` while the provider runs).
 - `IdentityUserInfoProvider.cs`: the subject-to-claims adapter over Identity.
 - `OidcStore/`: the SQLite-backed signing-key provider (`DatabaseKeysProvider`), the durable client store (`DurableClientStore`), and their `DbContext`.
