@@ -34,3 +34,8 @@ Node.js is required to build and run the SPA; the backend restores npm packages 
 - `Program.cs`: cookie + OpenID Connect authentication, and the YARP forwarder that attaches the access token.
 - `Controllers/BffController.cs`: the `check_session`, `login`, and `logout` endpoints.
 - `ClientApp/`: the React + TypeScript SPA built with Vite. `src/components/Bff.tsx` holds the session-aware fetch wrapper the rest of the UI uses.
+
+## The guides behind this sample
+
+- Securing a React SPA with the BFF pattern and Abblix OIDC Server: https://docs.abblix.com/docs/react-spa-bff-guide
+- Practical implementation of modern authentication on .NET (OpenID Connect, BFF and SPA): https://docs.abblix.com/docs/practical-implementation-of-modern-authentication-on-the-net-openid-connect-bff-and-spa
