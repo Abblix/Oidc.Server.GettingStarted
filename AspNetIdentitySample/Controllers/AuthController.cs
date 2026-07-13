@@ -1,79 +1,34 @@
-using System.Text.Json.Nodes;
-using Abblix.Oidc.Server.Features.RandomGenerators;
-using Abblix.Oidc.Server.Features.UserAuthentication;
-using Abblix.Oidc.Server.Model;
-using Abblix.Oidc.Server.Mvc;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
-using Path = Abblix.Oidc.Server.Mvc.Path;
-using SignInResult = Microsoft.AspNetCore.Identity.SignInResult;
-using UriBuilder = Abblix.Utils.UriBuilder;
 
 namespace AspNetIdentitySample.Controllers;
 
-public class AuthController : Controller
+// Serves the React auth SPA. The OIDC library redirects unauthenticated users to LoginUri
+// (/Auth/Login), and the "create account" link inside the SPA client-routes to /Auth/Register; both
+// paths return the same single-page app, which reads request_uri from the query string and drives
+// sign-in or sign-up against the JSON endpoints in AuthApiController.
+public sealed class AuthController(IAntiforgery antiforgery, IWebHostEnvironment environment) : Controller
 {
-    // GET: Auth/Login
-    public IActionResult Login([FromQuery(Name = "request_uri")] string requestUri)
+    [HttpGet("/Auth/Login")]
+    [HttpGet("/Auth/Register")]
+    public IActionResult Index()
     {
-        // Return a view with login/password inputs and sign-in button
-        return View(new { requestUri });
-    }
-
-    // POST: Auth/Login
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Login(
-        [FromServices] IAuthSessionService authService,
-        [FromServices] ISessionIdGenerator sessionIdGenerator,
-        [FromServices] IUriResolver uriResolver,
-        [FromServices] UserManager<IdentityUser> userManager,
-        [FromServices] SignInManager<IdentityUser> signIn,
-        [FromServices] TimeProvider clock,
-        [FromForm] string email,
-        [FromForm] string password,
-        [FromForm] string requestUri)
-    {
-        var user = await userManager.FindByEmailAsync(email);
-
-        // verifies the hash and enforces lockout, but issues no cookie: the session stays the library's
-        var result = user is not null
-            ? await signIn.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true)
-            : SignInResult.Failed;
-
-        if (!result.Succeeded)
+        // Issue the antiforgery request token in a JS-readable cookie. The SPA echoes it back in the
+        // X-CSRF-TOKEN header on every POST, which the [ValidateAntiForgeryToken] endpoints validate
+        // against the paired HttpOnly cookie. A server-rendered form did this with a hidden field; a
+        // SPA has to perform the same handshake explicitly.
+        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+        Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
         {
-            // Return an error message to the view to inform the user
-            ModelState.AddModelError("", "Invalid username or password");
-            return View(new { requestUri });
-        }
+            HttpOnly = false,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Path = "/",
+        });
 
-        // If authentication is successful, create a new authentication session
-        var authSession = new AuthSession(
-            user!.Id,                                        // the subject the claims adapter resolves later
-            sessionIdGenerator.GenerateSessionId(),
-            clock.GetUtcNow(),
-            CookieAuthenticationDefaults.AuthenticationScheme)
-        {
-            Email = user.Email,
-            EmailVerified = user.EmailConfirmed,
-            AuthenticationMethodReferences = ["pwd"],        // lands in the amr claim
-
-            // snapshot the security stamp: the cookie's OnValidatePrincipal compares it on every
-            // request, so a password change or UpdateSecurityStampAsync ends this session
-            AdditionalClaims = new JsonObject
-            {
-                ["security_stamp"] = await userManager.GetSecurityStampAsync(user),
-            },
-        };
-
-        // Sign in the user using the authentication service
-        await authService.SignInAsync(authSession);
-
-        // Redirect the user to the authorization endpoint URL, recovering the OIDC flow
-        var authorizeUrl = new UriBuilder(uriResolver.Content(Path.Authorize))
-            { Query = { [AuthorizationRequest.Parameters.RequestUri] = requestUri } };
-        return Redirect(authorizeUrl);
+        // The SPA is built into wwwroot/auth by the ClientApp Vite project; request_uri stays in the
+        // URL and is read by the SPA, so nothing needs to be injected into the page here.
+        var indexHtml = Path.Combine(environment.WebRootPath, "auth", "index.html");
+        return PhysicalFile(indexHtml, "text/html");
     }
 }

@@ -44,6 +44,20 @@ builder.Services.AddScoped<IUserInfoProvider, IdentityUserInfoProvider>();
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 
+// The React auth SPA posts JSON and echoes the antiforgery request token in this header; the
+// [ValidateAntiForgeryToken] endpoints validate it against the paired HttpOnly cookie.
+builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
+
+// Emit an OpenAPI document from the auth endpoints. It is the contract the React client generates its
+// TypeScript types from, so the two sides cannot silently drift. Served at /openapi/v1.json in
+// development; the client regenerates its types from it with `npm run gen:api` (see ClientApp), and
+// the generated schema is committed. Runtime emission is used deliberately over build-time emission,
+// which would run this app's startup (EnsureCreated + store seeding) as a build side effect.
+builder.Services.AddOpenApi(options =>
+    // Scope the document to the auth API. The client only generates types for its own contract, so the
+    // library's OIDC protocol endpoints stay out of the generated schema and it stays small.
+    options.ShouldInclude = description => description.RelativePath?.StartsWith("api/auth") ?? false);
+
 // Register and configure Abblix OIDC Server
 builder.Services.AddOidcServices(options =>
 {
@@ -119,45 +133,13 @@ builder.Services
 
 var app = builder.Build();
 
-// Create the Identity schema and seed a first user, so the sample runs out of the box.
-// A real deployment replaces this block with EF migrations and its own registration flow.
+// Create the Identity schema so the signup form has tables to write to. Nothing is seeded here:
+// users register themselves through /Auth/Register (see AuthController), so the very first thing a
+// fresh run asks for is a sign-up. A real deployment replaces EnsureCreated with EF migrations.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.EnsureCreatedAsync();
-
-    var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
-    if (await users.FindByEmailAsync("john.doe@example.com") is null)
-    {
-        var user = new IdentityUser
-        {
-            UserName = "john.doe@example.com",
-            Email = "john.doe@example.com",
-            EmailConfirmed = true,
-        };
-        // Generate the seed password instead of hardcoding one: nothing sensitive lands in source,
-        // and Identity stores only its salted PBKDF2 hash, never the plaintext.
-        var password = GeneratePassword();
-        var created = await users.CreateAsync(user, password);
-        if (!created.Succeeded)
-            throw new InvalidOperationException(string.Join("; ", created.Errors.Select(e => e.Description)));
-
-        // profile claims Identity does not model live in its claim store:
-        // the IdentityUserInfoProvider surfaces them when the profile scope asks
-        await users.AddClaimAsync(user, new Claim("name", "John Doe"));
-
-#warning DEV convenience only: even on the console this credential reaches container stdout and any log sink scraping it. A real deployment never surfaces a password: seed with no usable password and email a reset link, or force a change on first login.
-        // Show the generated password once, on the console, so the sample is runnable out of the box.
-        Console.WriteLine($"Seeded john.doe@example.com with a one-time generated password: {password}");
-
-        // Pause so an operator at a terminal can copy the password before startup logs scroll it away.
-        // Skipped when stdin is not interactive (container, CI, a background run) so it never hangs a headless start.
-        if (!Console.IsInputRedirected)
-        {
-            Console.WriteLine("Copy it now, then press Enter to start the server...");
-            Console.ReadLine();
-        }
-    }
 
     // Seed the OIDC store so the sample runs out of the box: a signing key that survives restarts,
     // and the test client. On the next run both already exist, so the same key keeps validating
@@ -218,36 +200,14 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 
+// Attribute-routed controllers: the JSON auth API (/api/auth/*) and the SPA host routes (/Auth/*).
+app.MapControllers();
+
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
-
-// Builds a cryptographically random password that satisfies the default Identity policy: one
-// character guaranteed from each required class (upper, lower, digit, non-alphanumeric), the rest
-// drawn from the full set, then shuffled so the guaranteed characters are not always in front.
-static string GeneratePassword()
-{
-    const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-    const string lower = "abcdefghijkmnpqrstuvwxyz";
-    const string digits = "23456789";
-    const string special = "!@#$%^&*-_";
-    const string all = upper + lower + digits + special;
-
-    var chars = new char[16];
-    chars[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
-    chars[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
-    chars[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
-    chars[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
-    for (var i = 4; i < chars.Length; i++)
-        chars[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
-
-    for (var i = chars.Length - 1; i > 0; i--)
-    {
-        var j = RandomNumberGenerator.GetInt32(i + 1);
-        (chars[i], chars[j]) = (chars[j], chars[i]);
-    }
-
-    return new string(chars);
-}

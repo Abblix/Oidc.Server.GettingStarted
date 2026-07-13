@@ -1,0 +1,26 @@
+{
+  "name": "aspnetidentity-auth-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "gen:api": "npx --yes --package typescript@5.9.2 --package openapi-typescript@7.13.0 openapi-typescript ./openapi.json -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "oxlint": "^1.73.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4"
+  }
+}
