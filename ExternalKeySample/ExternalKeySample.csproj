@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ExternalKeySample</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 2.4 dev build from the Abblix GitHub Packages feed (see NuGet.config): the external-key crypto
+         seam (IExternalSigner / IExternalKeyEncryptor) first ships in 2.4. When 2.4 reaches nuget.org, bump
+         this to the released 2.4.0 and delete NuGet.config: the released package restores from nuget.org. -->
+    <PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="2.4.0-dev.*" />
+    <!-- Azure Key Vault custodian SDK. The Vault/OpenBao custodian needs no SDK: it speaks the Transit
+         HTTP API directly through IHttpClientFactory. -->
+    <PackageReference Include="Azure.Security.KeyVault.Keys" Version="4.7.0" />
+    <PackageReference Include="Azure.Identity" Version="1.13.1" />
+  </ItemGroup>
+</Project>
