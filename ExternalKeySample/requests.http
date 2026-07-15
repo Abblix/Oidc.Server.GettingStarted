@@ -1,0 +1,24 @@
+# HTTP requests for the External Key Custodian sample.
+#
+# Run these inline from VS Code (with the REST Client extension) or a JetBrains IDE, or import them into
+# Postman, Bruno, or Hoppscotch. Trust the dev HTTPS certificate once so the client accepts it:
+#     dotnet dev-certs https --trust
+
+@host = https://localhost:5001
+
+### Fetch an access token (OAuth 2.0 client_credentials). It is signed inside the custodian.
+# @name token
+POST {{host}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=demo-service&client_secret=secret&scope=api
+
+### The published keys: public-only (kty, n, e), never any private material.
+GET {{host}}/.well-known/jwks
+
+### Introspect the token. With Provider:EncryptAccessToken on, this makes the server unwrap the
+### Content Encryption Key through the custodian before it can validate the token.
+POST {{host}}/connect/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token={{token.response.body.$.access_token}}&client_id=demo-service&client_secret=secret
