@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Azure;
+using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Keys;
 using Azure.Security.KeyVault.Keys.Cryptography;
@@ -16,13 +17,24 @@ namespace ExternalKeySample.Custodian.Azure;
 public sealed class AzureKeyVaultClient
 {
     private readonly Uri _vaultUri;
-    private readonly DefaultAzureCredential _credential = new();
+    private readonly TokenCredential _credential;
     private readonly KeyClient _keyClient;
     private readonly ConcurrentDictionary<string, CryptographyClient> _cryptographyClients = new();
 
     public AzureKeyVaultClient(IOptions<AzureKeyVaultOptions> options)
     {
-        _vaultUri = new Uri(options.Value.KeyVaultUri);
+        var settings = options.Value;
+        _vaultUri = new Uri(settings.KeyVaultUri);
+
+        // Use explicit service-principal credentials from configuration when all three are set; otherwise fall
+        // back to DefaultAzureCredential, which covers a managed identity, an Azure CLI sign-in, or the AZURE_*
+        // environment variables. Production on Azure uses a managed identity and needs none of these set.
+        _credential = !string.IsNullOrWhiteSpace(settings.TenantId)
+                && !string.IsNullOrWhiteSpace(settings.ClientId)
+                && !string.IsNullOrWhiteSpace(settings.ClientSecret)
+            ? new ClientSecretCredential(settings.TenantId, settings.ClientId, settings.ClientSecret)
+            : new DefaultAzureCredential();
+
         _keyClient = new KeyClient(_vaultUri, _credential);
     }
 
