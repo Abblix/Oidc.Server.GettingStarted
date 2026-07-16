@@ -4,11 +4,11 @@ using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Features;
 using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.UserInfo;
+using Abblix.Oidc.Server.Azure;
 using Abblix.Oidc.Server.MinimalApi;
 using Abblix.Oidc.Server.Model;
+using Abblix.Oidc.Server.Vault;
 using ExternalKeySample;
-using ExternalKeySample.Custodian.Azure;
-using ExternalKeySample.Custodian.Vault;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,17 +53,18 @@ builder.Services.AddOidcMinimalApi(options =>
 // custodian's remote CEK unwrap, so it is the sample's window onto the encryption arm.
 builder.Services.AddIntrospection();
 
-// The custodian is chosen by the KeyCustodian setting. This registration MUST run after AddOidcMinimalApi: its
-// IAuthServiceKeysProvider replaces the library default, and the last singular registration wins.
+// The custodian is chosen by the KeyCustodian setting. Each package's AddXxxExternalKeys binds its own options
+// section, registers the store behind the crypto seam, and replaces the library's default key provider. This MUST
+// run after AddOidcMinimalApi so the last singular IAuthServiceKeysProvider registration wins.
 var custodian = builder.Configuration.GetValue<KeyCustodian>("KeyCustodian");
 switch (custodian)
 {
     case KeyCustodian.Vault:
-        builder.Services.AddVaultCustodian(builder.Configuration);
+        builder.Services.AddVaultExternalKeys(options => builder.Configuration.GetSection("Vault").Bind(options));
         break;
 
     case KeyCustodian.Azure:
-        builder.Services.AddAzureCustodian(builder.Configuration);
+        builder.Services.AddAzureExternalKeys(options => builder.Configuration.GetSection("Azure").Bind(options));
         break;
 
     default:

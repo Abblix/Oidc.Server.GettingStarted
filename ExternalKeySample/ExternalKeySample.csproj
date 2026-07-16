@@ -6,13 +6,13 @@
     <RootNamespace>ExternalKeySample</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <!-- 2.4 dev build from the Abblix GitHub Packages feed (see NuGet.config): the external-key crypto
-         seam (IExternalSigner / IExternalKeyEncryptor) first ships in 2.4. When 2.4 reaches nuget.org, bump
-         this to the released 2.4.0 and delete NuGet.config: the released package restores from nuget.org. -->
-    <PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="2.4.0-dev.*" />
-    <!-- Azure Key Vault custodian SDK. The Vault/OpenBao custodian needs no SDK: it speaks the Transit
-         HTTP API directly through IHttpClientFactory. -->
-    <PackageReference Include="Azure.Security.KeyVault.Keys" Version="4.7.0" />
-    <PackageReference Include="Azure.Identity" Version="1.13.1" />
+    <!-- Local project references validate the sample against the in-development 2.4 external-key packages before
+         they publish. The Vault and Azure custodians are now the Abblix.Oidc.Server.Vault / .Azure packages: one
+         AddVaultExternalKeys / AddAzureExternalKeys call each, no custodian code in the sample. When 2.4 reaches
+         nuget.org, replace these with PackageReference to Abblix.Oidc.Server.MinimalApi / .Vault / .Azure (2.4.x)
+         and delete NuGet.config. The Azure SDK arrives transitively through the .Azure package. -->
+    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.MinimalApi\Abblix.Oidc.Server.MinimalApi.csproj" />
+    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.Vault\Abblix.Oidc.Server.Vault.csproj" />
+    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.Azure\Abblix.Oidc.Server.Azure.csproj" />
   </ItemGroup>
 </Project>

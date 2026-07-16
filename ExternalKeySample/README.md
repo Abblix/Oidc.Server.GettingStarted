@@ -87,8 +87,8 @@ Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and crea
 identity, or environment variables) - never from configuration. Azure Key Vault's Standard tier with
 software-protected RSA keys has no per-key monthly fee, so a demo stays within the free credit.
 
-The application code does not change: the same `IExternalSigner` / `IExternalKeyEncryptor` seam is satisfied by
-a different adapter, selected purely by configuration.
+The application code does not change: the `AddAzureExternalKeys` package satisfies the same `IKeyCustodian`
+seam as the Vault one, selected purely by configuration.
 
 ## Settings
 
@@ -108,15 +108,15 @@ a different adapter, selected purely by configuration.
 
 ## How it maps to the library
 
-The provider sets no signing or encryption keys in `OidcOptions`. Instead it registers:
+The provider sets no signing or encryption keys in `OidcOptions`. Instead, one call wires the chosen custodian:
+`AddVaultExternalKeys` (the **Abblix.Oidc.Server.Vault** package) or `AddAzureExternalKeys` (the
+**Abblix.Oidc.Server.Azure** package). Each registers its backend as an `IKeyCustodian` (sign, unwrap and
+public-key fetch by key name and algorithm), routes every private operation through the shared crypto seam, and
+replaces the default key provider with one that publishes the **public-only** JWKs - the missing private half is
+what routes the operation to the custodian, keyed by a `kid` that is also the custodian's handle for the key.
 
-- `IAuthServiceKeysProvider` - returns the **public-only** JWKs (the missing private half is what routes the
-  operation to the custodian), keyed by a `kid` that is also the custodian's handle for the key.
-- `IExternalSigner` - signs bytes by `kid` inside the custodian.
-- `IExternalKeyEncryptor` - unwraps the CEK by `kid` inside the custodian.
-
-The custodian-specific code is one small adapter set under `Custodian/Vault` and `Custodian/Azure`; everything
-else is standard Abblix OIDC Server wiring.
+There is no custodian code in the sample: the packages carry it. A host with a different backend (an on-prem HSM,
+AWS KMS) implements one `IKeyCustodian` and calls `AddExternalKeys`.
 
 ## Not for production as-is
 
