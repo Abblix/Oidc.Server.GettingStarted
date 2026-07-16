@@ -110,8 +110,8 @@ seam as the Vault one, selected purely by configuration.
 
 The provider sets no signing or encryption keys in `OidcOptions`. Instead, one call wires the chosen custodian:
 `AddVaultExternalKeys` (the **Abblix.Oidc.Server.Vault** package) or `AddAzureExternalKeys` (the
-**Abblix.Oidc.Server.Azure** package). Each registers its backend as an `IKeyCustodian` (sign, unwrap and
-public-key fetch by key name and algorithm), routes every private operation through the shared crypto seam, and
+**Abblix.Oidc.Server.Azure** package). Each registers its backend as an `IKeyCustodian` (sign and unwrap by
+version, plus version enumeration by key name), routes every private operation through the shared crypto seam, and
 replaces the default key provider with one that publishes the **public-only** JWKs - the missing private half is
 what routes the operation to the custodian, keyed by a `kid` that is also the custodian's handle for the key.
 
