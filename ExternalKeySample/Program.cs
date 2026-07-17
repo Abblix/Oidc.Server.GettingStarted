@@ -76,7 +76,10 @@ custodianBuilder.HoldKeysInCustodian(new CustodianHeldKeys
 {
     SigningKeyName = provider.SigningKeyName,
 
-    // Only needed while EncryptAccessToken is on. Left unset, no encryption key is published at all.
+    // In general an encryption key serves two purposes: encrypting the provider's own tokens, and decrypting
+    // inbound JWE a client sent (an encrypted request object or client assertion). This sample only ever needs
+    // the first, since client_credentials sends neither, so it names the key only while it encrypts its tokens.
+    // Left unset, no encryption key is published at all.
     EncryptionKeyName = provider.EncryptAccessToken ? provider.EncryptionKeyName : null,
 });
 
