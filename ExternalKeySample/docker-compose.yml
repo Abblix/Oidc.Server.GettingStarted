@@ -21,7 +21,7 @@ services:
       retries: 15
 
   # One-shot: enable the Transit engine and create the signing and encryption keys as non-exportable RSA keys,
-  # then exit. The key names match Vault:SigningKeyName / Vault:EncryptionKeyName in appsettings.json.
+  # then exit. The key names match Provider:SigningKeyName / Provider:EncryptionKeyName in appsettings.json.
   provision:
     image: openbao/openbao:2.6.0
     depends_on:

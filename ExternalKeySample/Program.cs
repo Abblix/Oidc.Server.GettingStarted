@@ -3,6 +3,7 @@ using System.Text;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Features;
 using Abblix.Oidc.Server.Features.ClientInformation;
+using Abblix.Oidc.Server.Features.ExternalKeys;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.Azure;
 using Abblix.Oidc.Server.MinimalApi;
@@ -53,23 +54,31 @@ builder.Services.AddOidcMinimalApi(options =>
 // custodian's remote CEK unwrap, so it is the sample's window onto the encryption arm.
 builder.Services.AddIntrospection();
 
-// The custodian is chosen by the KeyCustodian setting. Each package's AddXxxExternalKeys binds its own options
-// section, registers the store behind the crypto seam, and replaces the library's default key provider. This MUST
-// run after AddOidcMinimalApi so the last singular IAuthServiceKeysProvider registration wins.
+// Wiring a custodian is two steps, and the sample splits along them. First: WHICH custodian holds the keys. The
+// KeyCustodian setting names it, and each member's name is also its configuration section, so the section name is
+// never repeated here. Only the call itself differs, since each package has its own options type. This MUST run
+// after AddOidcMinimalApi, because the tier call below composes the external crypto backends with the in-process
+// ones the OIDC registration puts in place.
 var custodian = builder.Configuration.GetValue<KeyCustodian>("KeyCustodian");
-switch (custodian)
+var settings = builder.Configuration.GetSection(custodian.ToString());
+var custodianBuilder = custodian switch
 {
-    case KeyCustodian.Vault:
-        builder.Services.AddVaultExternalKeys(options => builder.Configuration.GetSection("Vault").Bind(options));
-        break;
+    KeyCustodian.Vault => builder.Services.AddVaultCustodian(settings.Bind),
+    KeyCustodian.Azure => builder.Services.AddAzureCustodian(settings.Bind),
+    _ => throw new InvalidOperationException($"Unsupported KeyCustodian '{custodian}'."),
+};
 
-    case KeyCustodian.Azure:
-        builder.Services.AddAzureExternalKeys(options => builder.Configuration.GetSection("Azure").Bind(options));
-        break;
+// Second: HOW the library uses it. This is the security posture, so it is named rather than defaulted, and the
+// same call serves either custodian. HoldKeysInCustodian is the tier where the private half never enters this
+// process: each key name is the custodian's own, and every signature and CEK unwrap is a round-trip to it.
+// Omitting this call would fail at startup rather than fall back to local keys.
+custodianBuilder.HoldKeysInCustodian(new CustodianHeldKeys
+{
+    SigningKeyName = provider.SigningKeyName,
 
-    default:
-        throw new InvalidOperationException($"Unsupported KeyCustodian '{custodian}'.");
-}
+    // Only needed while EncryptAccessToken is on. Left unset, no encryption key is published at all.
+    EncryptionKeyName = provider.EncryptAccessToken ? provider.EncryptionKeyName : null,
+});
 
 var app = builder.Build();
 

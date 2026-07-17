@@ -26,4 +26,16 @@ public sealed class ProviderOptions
 
     /// <summary>The secret the demo client authenticates with. It is hashed before it reaches the client store.</summary>
     public string ClientSecret { get; set; } = "secret";
+
+    /// <summary>
+    /// The custodian's name for the signing key. It lives here rather than in the Vault or Azure section because
+    /// it is not a property of the connection: the same name is used whichever custodian holds the key.
+    /// </summary>
+    public string SigningKeyName { get; set; } = "oidc-sign";
+
+    /// <summary>
+    /// The custodian's name for the key that unwraps encrypted-token CEKs. Used only while
+    /// <see cref="EncryptAccessToken"/> is on.
+    /// </summary>
+    public string EncryptionKeyName { get; set; } = "oidc-enc";
 }

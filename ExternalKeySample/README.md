@@ -87,8 +87,8 @@ Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and crea
 identity, or environment variables) - never from configuration. Azure Key Vault's Standard tier with
 software-protected RSA keys has no per-key monthly fee, so a demo stays within the free credit.
 
-The application code does not change: the `AddAzureExternalKeys` package satisfies the same `IKeyCustodian`
-seam as the Vault one, selected purely by configuration.
+Only the custodian call changes: `AddAzureCustodian` satisfies the same `IKeyCustodian` seam as the Vault one, and
+the tier call after it is identical, so the switch is driven purely by configuration.
 
 ## Settings
 
@@ -99,24 +99,32 @@ seam as the Vault one, selected purely by configuration.
 | `Provider:EncryptAccessToken` | `true` encrypts access tokens (JWE) to exercise the unwrap path; `false` leaves them a verifiable JWS. |
 | `Provider:Scope` | The scope the demo client may request. |
 | `Provider:ClientId` / `Provider:ClientSecret` | The `client_credentials` client's identity (the secret is hashed before storage). |
+| `Provider:SigningKeyName` / `Provider:EncryptionKeyName` | The custodian's key names. They sit here, not in the `Vault` or `Azure` section, because they are not part of the connection: the same names work whichever custodian holds the keys. |
 | `Vault:Address` | Base URL of the Vault / OpenBao server. |
 | `Vault:TransitMount` | Mount path of the Transit engine (default `transit`). |
-| `Vault:SigningKeyName` / `Vault:EncryptionKeyName` | Transit key names, which are also the published `kid` values. |
 | `Vault` token | Presented as `X-Vault-Token`, taken from the `Vault__Token` environment variable, never hardcoded. |
 | `Azure:KeyVaultUri` | The vault URI, e.g. `https://my-vault.vault.azure.net/`. |
-| `Azure:SigningKeyName` / `Azure:EncryptionKeyName` | Key Vault key names, which are also the published `kid` values. |
 
 ## How it maps to the library
 
-The provider sets no signing or encryption keys in `OidcOptions`. Instead, one call wires the chosen custodian:
-`AddVaultExternalKeys` (the **Abblix.Oidc.Server.Vault** package) or `AddAzureExternalKeys` (the
-**Abblix.Oidc.Server.Azure** package). Each registers its backend as an `IKeyCustodian` (sign and unwrap by
-version, plus version enumeration by key name), routes every private operation through the shared crypto seam, and
-replaces the default key provider with one that publishes the **public-only** JWKs - the missing private half is
-what routes the operation to the custodian, keyed by a `kid` that is also the custodian's handle for the key.
+The provider sets no signing or encryption keys in `OidcOptions`. They come from the custodian instead, wired in
+two steps that the sample keeps visibly apart.
+
+`AddVaultCustodian` (the **Abblix.Oidc.Server.Vault** package) or `AddAzureCustodian` (the
+**Abblix.Oidc.Server.Azure** package) says which custodian holds the keys and how to reach it. Each registers its
+backend as an `IKeyCustodian`: sign and unwrap by key version, plus version enumeration by key name.
+
+`HoldKeysInCustodian` then says how the library uses it, and the sample calls it once for either custodian. It
+routes every private operation through the shared crypto seam and publishes the **public-only** JWKs. The missing
+private half is what routes an operation to the custodian, addressed by the `kid` of the exact key version: Transit
+publishes `oidc-sign:1`, Key Vault `oidc-sign/<version>`, so a rotation overlaps and the bare key name is never a
+`kid`. Naming the tier is what makes the posture explicit; omit the call and the provider fails at startup rather
+than quietly falling back to keys in configuration.
 
 There is no custodian code in the sample: the packages carry it. A host with a different backend (an on-prem HSM,
-AWS KMS) implements one `IKeyCustodian` and calls `AddExternalKeys`.
+AWS KMS) implements one `IKeyCustodian` and wires it with `AddCustodian<T>()` plus the same tier call. The shared
+model, including what the guarantee costs and does not cover, is in
+[EXTERNAL-KEYS.md](https://github.com/Abblix/Oidc.Server/blob/master/EXTERNAL-KEYS.md).
 
 ## Not for production as-is
 

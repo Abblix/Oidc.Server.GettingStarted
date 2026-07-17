@@ -7,10 +7,10 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Local project references validate the sample against the in-development 2.4 external-key packages before
-         they publish. The Vault and Azure custodians are now the Abblix.Oidc.Server.Vault / .Azure packages: one
-         AddVaultExternalKeys / AddAzureExternalKeys call each, no custodian code in the sample. When 2.4 reaches
-         nuget.org, replace these with PackageReference to Abblix.Oidc.Server.MinimalApi / .Vault / .Azure (2.4.x)
-         and delete NuGet.config. The Azure SDK arrives transitively through the .Azure package. -->
+         they publish. The Vault and Azure custodians are the Abblix.Oidc.Server.Vault / .Azure packages: an
+         AddVaultCustodian / AddAzureCustodian call plus the tier call after it, no custodian code in the sample.
+         When 2.4 reaches nuget.org, replace these with PackageReference to Abblix.Oidc.Server.MinimalApi / .Vault
+         / .Azure (2.4.x) and delete NuGet.config. The Azure SDK arrives transitively through the .Azure package. -->
     <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.MinimalApi\Abblix.Oidc.Server.MinimalApi.csproj" />
     <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.Vault\Abblix.Oidc.Server.Vault.csproj" />
     <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.Azure\Abblix.Oidc.Server.Azure.csproj" />
