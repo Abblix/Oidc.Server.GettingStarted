@@ -3,6 +3,7 @@
   <Project Path="AspNetIdentitySample/AspNetIdentitySample.csproj" />
   <Project Path="BffSample/BffSample.csproj" />
   <Project Path="BlazorSample/BlazorSample.csproj" />
+  <Project Path="ExternalKeySample/ExternalKeySample.csproj" />
   <Project Path="OpenIDProviderApp/OpenIDProviderApp.csproj" />
   <Project Path="TestClientApp/TestClientApp.csproj" />
 </Solution>

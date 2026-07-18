@@ -20,8 +20,11 @@ services:
       timeout: 2s
       retries: 15
 
-  # One-shot: enable the Transit engine and create the signing and encryption keys as non-exportable RSA keys,
-  # then exit. The key names match Provider:SigningKeyName / Provider:EncryptionKeyName in appsettings.json.
+  # One-shot: enable the Transit engine and create the keys both tiers use as non-exportable RSA keys, then exit.
+  # The Custodian tier signs and unwraps with oidc-sign / oidc-enc; the Process tier seals its minted keys to
+  # oidc-kek and keeps the sealed ring in the KV v2 engine that dev mode already mounts at secret/. The names
+  # match Provider:SigningKeyName / EncryptionKeyName / KeyEncryptionKeyName in appsettings.json. Provisioning all
+  # three keeps one compose file behind both tiers; each tier ignores the keys it does not use.
   provision:
     image: openbao/openbao:2.6.0
     depends_on:
@@ -38,4 +41,5 @@ services:
         bao secrets enable transit 2>/dev/null || true
         bao write transit/keys/oidc-sign type=rsa-2048
         bao write transit/keys/oidc-enc type=rsa-2048
-        echo "Transit signing and encryption keys are ready."
+        bao write transit/keys/oidc-kek type=rsa-2048
+        echo "Transit keys are ready: oidc-sign, oidc-enc, oidc-kek."

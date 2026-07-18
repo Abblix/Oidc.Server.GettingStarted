@@ -60,6 +60,7 @@ builder.Services.AddIntrospection();
 // after AddOidcMinimalApi, because the tier call below composes the external crypto backends with the in-process
 // ones the OIDC registration puts in place.
 var custodian = builder.Configuration.GetValue<KeyCustodian>("KeyCustodian");
+var tier = builder.Configuration.GetValue<UseKeysIn>("UseKeysIn");
 var settings = builder.Configuration.GetSection(custodian.ToString());
 var custodianBuilder = custodian switch
 {
@@ -68,20 +69,54 @@ var custodianBuilder = custodian switch
     _ => throw new InvalidOperationException($"Unsupported KeyCustodian '{custodian}'."),
 };
 
-// Second: HOW the library uses it. This is the security posture, so it is named rather than defaulted, and the
-// same call serves either custodian. HoldKeysInCustodian is the tier where the private half never enters this
-// process: each key name is the custodian's own, and every signature and CEK unwrap is a round-trip to it.
-// Omitting this call would fail at startup rather than fall back to local keys.
-custodianBuilder.HoldKeysInCustodian(new CustodianHeldKeys
+// Second: HOW the library uses it. This is the security posture, so it is named rather than defaulted; omitting it
+// fails at startup rather than falling back to local keys. The two tiers differ in whether the private half ever
+// exists in this process, and the sample picks between them with the UseKeysIn setting.
+switch (tier)
 {
-    SigningKeyName = provider.SigningKeyName,
+    case UseKeysIn.Custodian:
+        // The private half never enters this process: each key name is the custodian's own, and every signature
+        // and CEK unwrap is a round-trip to it.
+        custodianBuilder.UseKeysInCustodian(new CustodianHeldKeys
+        {
+            SigningKeyName = provider.SigningKeyName,
 
-    // In general an encryption key serves two purposes: encrypting the provider's own tokens, and decrypting
-    // inbound JWE a client sent (an encrypted request object or client assertion). This sample only ever needs
-    // the first, since client_credentials sends neither, so it names the key only while it encrypts its tokens.
-    // Left unset, no encryption key is published at all.
-    EncryptionKeyName = provider.EncryptAccessToken ? provider.EncryptionKeyName : null,
-});
+            // In general an encryption key serves two purposes: encrypting the provider's own tokens, and
+            // decrypting inbound JWE a client sent (an encrypted request object or client assertion). This sample
+            // only ever needs the first, since client_credentials sends neither, so it names the key only while it
+            // encrypts its tokens. Left unset, no encryption key is published at all.
+            EncryptionKeyName = provider.EncryptAccessToken ? provider.EncryptionKeyName : null,
+        });
+        break;
+
+    case UseKeysIn.Process:
+        // The server mints its own signing keys, seals each to the custodian's key-encryption key, and keeps the
+        // sealed copies in a store the same backend provides. Signing then runs locally; the custodian is reached
+        // only to open a sealed key and to protect the next one. The private half lives in memory while in use, so
+        // this trades tier a's "never in the process" for no per-token round-trip.
+        var minted = custodianBuilder.UseKeysInProcess(new MintedKeys
+        {
+            KeyEncryptionKeyName = provider.KeyEncryptionKeyName,
+
+            // Config drives this directly: it is null unless the configuration sets it, and null mints no
+            // encryption key, so it is left out of appsettings.json until this sample encrypts its own tokens.
+            EncryptionAlgorithm = provider.EncryptionAlgorithm,
+        });
+
+        // The ring of sealed keys lives in the same backend as the custodian: a KV v2 engine for Vault, a Blob
+        // Storage container for Azure. Each defaults its location, so the Vault ring needs no configuration and
+        // the Azure ring needs only the storage endpoint (the Azure:Blob section).
+        _ = custodian switch
+        {
+            KeyCustodian.Vault => minted.PersistRingToVaultKeyValue(),
+            KeyCustodian.Azure => minted.PersistRingToAzureBlob(settings.GetSection("Blob").Bind),
+            _ => throw new InvalidOperationException($"Unsupported KeyCustodian '{custodian}'."),
+        };
+        break;
+
+    default:
+        throw new InvalidOperationException($"Unsupported UseKeysIn '{tier}'.");
+}
 
 var app = builder.Build();
 

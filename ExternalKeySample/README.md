@@ -17,6 +17,10 @@ lives in an HSM/KMS the way a production identity provider keeps it.
   makes the server unwrap the Content Encryption Key inside the custodian, then validate the token.
 - **The private key never leaves the custodian.** The JWKS carries only `n`/`e`; the Transit key is created
   non-exportable. Seal the custodian and token issuance fails - proof the key really lives there.
+- **Or the two postures side by side.** `UseKeysIn` switches between keys held in the custodian (a round-trip per
+  token, the key never in the process) and keys minted in the process and sealed to the custodian (local signing,
+  the opened key held in memory). The sealing kill switch behaves oppositely in each, which is the trade made
+  visible.
 
 ## Prerequisites
 
@@ -80,6 +84,40 @@ curl -sk -X POST https://localhost:5001/connect/introspect \
 # -> {"active":true,...}: the server decrypted the token through the custodian.
 ```
 
+## Mint the keys in the process instead
+
+`UseKeysIn` chooses the posture. Everything above is the default, `Custodian`: the private half never leaves the
+custodian. Set it to `Process` and the server mints its own signing key, seals it to `oidc-kek`, keeps the sealed
+copy in the custodian's own store (Vault's KV v2 engine here), and then signs locally:
+
+```bash
+export UseKeysIn=Process
+dotnet run --urls https://localhost:5001
+```
+
+The token still verifies against `/jwks`, but the `kid` is now the minted key's thumbprint, not `oidc-sign`: the
+server generated the key, so it named it. The sealed key sits in the ring as ciphertext, never a plaintext key:
+
+```bash
+docker compose exec openbao bao kv list secret/oidc-keyring
+# one entry per active key; read one and it is a compact JWE (alg=RSA-OAEP-256, kid=oidc-kek:1), not a raw key.
+```
+
+The kill switch now behaves the opposite way, which is the whole trade. Seal the custodian and a **running** server
+keeps issuing tokens, because it signs from the key it already opened into memory:
+
+```bash
+docker compose exec openbao bao operator seal
+curl -sk -o /dev/null -w "%{http_code}\n" -X POST https://localhost:5001/connect/token \
+  -d "grant_type=client_credentials&client_id=demo-service&client_secret=secret&scope=api"
+# -> 200: signing is local now, so a sealed custodian does not stop a running server. A cold start would: a fresh
+#    server cannot open the ring without the custodian.
+```
+
+That is the tier choice in one line. `Custodian` keeps the key out of the process and pays a round-trip per token;
+`Process` signs locally and keeps the sealed keys durable, at the cost of holding the opened key in memory. The
+full trade-off is in [EXTERNAL_KEYS.md](https://github.com/Abblix/Oidc.Server/blob/master/EXTERNAL_KEYS.md).
+
 ## Switch to Azure Key Vault
 
 Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and create two RSA keys named
@@ -87,19 +125,25 @@ Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and crea
 identity, or environment variables) - never from configuration. Azure Key Vault's Standard tier with
 software-protected RSA keys has no per-key monthly fee, so a demo stays within the free credit.
 
-Only the custodian call changes: `AddAzureCustodian` satisfies the same `IKeyCustodian` seam as the Vault one, and
-the tier call after it is identical, so the switch is driven purely by configuration.
+`UseKeysIn` works the same against Azure. For `Custodian`, only the custodian call changes: `AddAzureCustodian`
+satisfies the same `IKeyCustodian` seam as the Vault one, so the switch is driven purely by configuration. For
+`Process`, the ring lives in Blob Storage rather than Vault's KV engine, so there is a little more to set up:
+create an `oidc-kek` RSA key in the vault, set `Azure:Blob:ServiceUri` to a storage account's blob endpoint (the
+container is created on first use), and grant the running identity Key Vault Crypto User on the key plus Storage
+Blob Data Contributor on the container.
 
 ## Settings
 
 | Setting | Meaning |
 | --- | --- |
 | `KeyCustodian` | Which custodian backs the keys: `Vault` or `Azure`. |
+| `UseKeysIn` | The posture: `Custodian` (the private half stays in the custodian) or `Process` (the server mints keys, seals them to the custodian, and signs locally). |
 | `Provider:Issuer` | The OIDC issuer identifier and the base URL the server runs on. |
 | `Provider:EncryptAccessToken` | `true` encrypts access tokens (JWE) to exercise the unwrap path; `false` leaves them a verifiable JWS. |
 | `Provider:Scope` | The scope the demo client may request. |
 | `Provider:ClientId` / `Provider:ClientSecret` | The `client_credentials` client's identity (the secret is hashed before storage). |
 | `Provider:SigningKeyName` / `Provider:EncryptionKeyName` | The custodian's key names. They sit here, not in the `Vault` or `Azure` section, because they are not part of the connection: the same names work whichever custodian holds the keys. |
+| `Provider:KeyEncryptionKeyName` | The custodian's key that seals the minted keys. Used only when `UseKeysIn` is `Process`. |
 | `Vault:Address` | Base URL of the Vault / OpenBao server. |
 | `Vault:TransitMount` | Mount path of the Transit engine (default `transit`). |
 | `Vault` token | Presented as `X-Vault-Token`, taken from the `Vault__Token` environment variable, never hardcoded. |
@@ -114,17 +158,19 @@ two steps that the sample keeps visibly apart.
 **Abblix.Oidc.Server.Azure** package) says which custodian holds the keys and how to reach it. Each registers its
 backend as an `IKeyCustodian`: sign and unwrap by key version, plus version enumeration by key name.
 
-`HoldKeysInCustodian` then says how the library uses it, and the sample calls it once for either custodian. It
-routes every private operation through the shared crypto seam and publishes the **public-only** JWKs. The missing
-private half is what routes an operation to the custodian, addressed by the `kid` of the exact key version: Transit
-publishes `oidc-sign:1`, Key Vault `oidc-sign/<version>`, so a rotation overlaps and the bare key name is never a
-`kid`. Naming the tier is what makes the posture explicit; omit the call and the provider fails at startup rather
-than quietly falling back to keys in configuration.
+The tier call then says how the library uses it, and naming it is what makes the posture explicit: omit it and the
+provider fails at startup rather than quietly falling back to keys in configuration. The sample picks the call from
+`UseKeysIn`. `UseKeysInCustodian` routes every private operation through the shared crypto seam and publishes the
+**public-only** JWKs; the missing private half is what sends an operation to the custodian, addressed by the `kid`
+of the exact key version (Transit publishes `oidc-sign:1`, Key Vault `oidc-sign/<version>`, so a rotation overlaps
+and the bare key name is never a `kid`). `UseKeysInProcess` instead mints the signing key in the process and seals
+it to the key-encryption key, so it is followed by `PersistRingToVaultKeyValue` or `PersistRingToAzureBlob` to say
+where the sealed ring lives; signing then runs locally and the `kid` is the minted key's own thumbprint.
 
 There is no custodian code in the sample: the packages carry it. A host with a different backend (an on-prem HSM,
 AWS KMS) implements one `IKeyCustodian` and wires it with `AddCustodian<T>()` plus the same tier call. The shared
 model, including what the guarantee costs and does not cover, is in
-[EXTERNAL-KEYS.md](https://github.com/Abblix/Oidc.Server/blob/master/EXTERNAL-KEYS.md).
+[EXTERNAL_KEYS.md](https://github.com/Abblix/Oidc.Server/blob/master/EXTERNAL_KEYS.md).
 
 ## Not for production as-is
 

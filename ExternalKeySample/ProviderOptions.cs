@@ -38,4 +38,19 @@ public sealed class ProviderOptions
     /// <see cref="EncryptAccessToken"/> is on.
     /// </summary>
     public string EncryptionKeyName { get; set; } = "oidc-enc";
+
+    /// <summary>
+    /// The JWE key-management algorithm for the encryption key the server mints, in the tier where keys live in
+    /// the process. Left unset it is null, and null mints no encryption key, so leave it out of the configuration
+    /// unless <see cref="EncryptAccessToken"/> is on. Vault Transit unwraps RSA-OAEP-256 only; Azure Key Vault also
+    /// accepts RSA-OAEP and RSA1_5.
+    /// </summary>
+    public string? EncryptionAlgorithm { get; set; }
+
+    /// <summary>
+    /// The custodian's name for the key-encryption key that seals the minted keys. Used only in the
+    /// <see cref="UseKeysIn.Process"/> tier, where the server mints its own signing keys and the custodian holds
+    /// just this one key to protect them.
+    /// </summary>
+    public string KeyEncryptionKeyName { get; set; } = "oidc-kek";
 }
