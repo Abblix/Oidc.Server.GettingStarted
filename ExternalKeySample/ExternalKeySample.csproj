@@ -11,8 +11,8 @@
          AddVaultCustodian / AddAzureCustodian call plus the tier call after it, no custodian code in the sample.
          When 2.4 reaches nuget.org, replace these with PackageReference to Abblix.Oidc.Server.MinimalApi / .Vault
          / .Azure (2.4.x) and delete NuGet.config. The Azure SDK arrives transitively through the .Azure package. -->
-    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.MinimalApi\Abblix.Oidc.Server.MinimalApi.csproj" />
-    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.Vault\Abblix.Oidc.Server.Vault.csproj" />
-    <ProjectReference Include="..\..\Oidc.Server\Abblix.Oidc.Server.Azure\Abblix.Oidc.Server.Azure.csproj" />
+    <ProjectReference Include="..\..\Oidc.Server\src\Abblix.Oidc.Server.MinimalApi\Abblix.Oidc.Server.MinimalApi.csproj" />
+    <ProjectReference Include="..\..\Oidc.Server\src\Abblix.Oidc.Server.Vault\Abblix.Oidc.Server.Vault.csproj" />
+    <ProjectReference Include="..\..\Oidc.Server\src\Abblix.Oidc.Server.Azure\Abblix.Oidc.Server.Azure.csproj" />
   </ItemGroup>
 </Project>
