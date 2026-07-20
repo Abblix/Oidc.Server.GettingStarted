@@ -114,7 +114,7 @@ curl -sk -o /dev/null -w "%{http_code}\n" -X POST https://localhost:5001/connect
 #    server cannot open the ring without the custodian.
 ```
 
-That is the tier choice in one line. `Custodian` keeps the key out of the process and pays a round-trip per token;
+That is the placement choice in one line. `Custodian` keeps the key out of the process and pays a round-trip per token;
 `Process` signs locally and keeps the sealed keys durable, at the cost of holding the opened key in memory. The
 full trade-off is in [EXTERNAL_KEYS.md](https://github.com/Abblix/Oidc.Server/blob/master/EXTERNAL_KEYS.md).
 
@@ -154,11 +154,11 @@ Blob Data Contributor on the container.
 The provider sets no signing or encryption keys in `OidcOptions`. They come from the custodian instead, wired in
 two steps that the sample keeps visibly apart.
 
-`AddVaultCustodian` (the **Abblix.Oidc.Server.Vault** package) or `AddAzureCustodian` (the
-**Abblix.Oidc.Server.Azure** package) says which custodian holds the keys and how to reach it. Each registers its
+`AddVaultCustodian` (the **Abblix.Jwt.Vault** package) or `AddAzureCustodian` (the
+**Abblix.Jwt.Azure** package) says which custodian holds the keys and how to reach it. Each registers its
 backend as an `IKeyCustodian`: sign and unwrap by key version, plus version enumeration by key name.
 
-The tier call then says how the library uses it, and naming it is what makes the posture explicit: omit it and the
+The placement call then says how the library uses it, and naming it is what makes the posture explicit: omit it and the
 provider fails at startup rather than quietly falling back to keys in configuration. The sample picks the call from
 `UseKeysIn`. `UseKeysInCustodian` routes every private operation through the shared crypto seam and publishes the
 **public-only** JWKs; the missing private half is what sends an operation to the custodian, addressed by the `kid`
@@ -168,7 +168,7 @@ it to the key-encryption key, so it is followed by `PersistRingToVaultKeyValue` 
 where the sealed ring lives; signing then runs locally and the `kid` is the minted key's own thumbprint.
 
 There is no custodian code in the sample: the packages carry it. A host with a different backend (an on-prem HSM,
-AWS KMS) implements one `IKeyCustodian` and wires it with `AddCustodian<T>()` plus the same tier call. The shared
+AWS KMS) implements one `IKeyCustodian` and wires it with `AddCustodian<T>()` plus the same placement call. The shared
 model, including what the guarantee costs and does not cover, is in
 [EXTERNAL_KEYS.md](https://github.com/Abblix/Oidc.Server/blob/master/EXTERNAL_KEYS.md).
 

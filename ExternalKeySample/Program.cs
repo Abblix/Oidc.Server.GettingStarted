@@ -6,10 +6,10 @@ using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Jwt.ExternalKeys;
 using Abblix.Oidc.Server.Features.ExternalKeys;
 using Abblix.Oidc.Server.Features.UserInfo;
-using Abblix.Oidc.Server.Azure;
+using Abblix.Jwt.Azure;
 using Abblix.Oidc.Server.MinimalApi;
 using Abblix.Oidc.Server.Model;
-using Abblix.Oidc.Server.Vault;
+using Abblix.Jwt.Vault;
 using ExternalKeySample;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -58,10 +58,10 @@ builder.Services.AddIntrospection();
 // Wiring a custodian is two steps, and the sample splits along them. First: WHICH custodian holds the keys. The
 // KeyCustodian setting names it, and each member's name is also its configuration section, so the section name is
 // never repeated here. Only the call itself differs, since each package has its own options type. This MUST run
-// after AddOidcMinimalApi, because the tier call below composes the external crypto backends with the in-process
+// after AddOidcMinimalApi, because the placement call below composes the external crypto backends with the in-process
 // ones the OIDC registration puts in place.
 var custodian = builder.Configuration.GetValue<KeyCustodian>("KeyCustodian");
-var tier = builder.Configuration.GetValue<UseKeysIn>("UseKeysIn");
+var placement = builder.Configuration.GetValue<UseKeysIn>("UseKeysIn");
 var settings = builder.Configuration.GetSection(custodian.ToString());
 var custodianBuilder = custodian switch
 {
@@ -71,9 +71,9 @@ var custodianBuilder = custodian switch
 };
 
 // Second: HOW the library uses it. This is the security posture, so it is named rather than defaulted; omitting it
-// fails at startup rather than falling back to local keys. The two tiers differ in whether the private half ever
+// fails at startup rather than falling back to local keys. The two placements differ in whether the private half ever
 // exists in this process, and the sample picks between them with the UseKeysIn setting.
-switch (tier)
+switch (placement)
 {
     case UseKeysIn.Custodian:
         // The private half never enters this process: each key name is the custodian's own, and every signature
@@ -94,7 +94,7 @@ switch (tier)
         // The server mints its own signing keys, seals each to the custodian's key-encryption key, and keeps the
         // sealed copies in a store the same backend provides. Signing then runs locally; the custodian is reached
         // only to open a sealed key and to protect the next one. The private half lives in memory while in use, so
-        // this trades tier a's "never in the process" for no per-token round-trip.
+        // this trades the custodian-held placement's "never in the process" for no per-token round-trip.
         var minted = custodianBuilder.UseKeysInProcess(new MintedKeys
         {
             KeyEncryptionKeyName = provider.KeyEncryptionKeyName,
@@ -116,7 +116,7 @@ switch (tier)
         break;
 
     default:
-        throw new InvalidOperationException($"Unsupported UseKeysIn '{tier}'.");
+        throw new InvalidOperationException($"Unsupported UseKeysIn '{placement}'.");
 }
 
 var app = builder.Build();
