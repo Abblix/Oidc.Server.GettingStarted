@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Features;
@@ -29,7 +29,9 @@ builder.Services.AddCors();
 var provider = builder.Configuration.GetSection(ProviderOptions.SectionName).Get<ProviderOptions>()
     ?? new ProviderOptions();
 
-builder.Services.AddOidcMinimalApi(options =>
+// AddOidcServices is the core plus this package's transport, and the MVC package spells it identically, so
+// swapping adapters changes the package reference and the endpoint mapping rather than this line.
+builder.Services.AddOidcServices(options =>
 {
     options.Issuer = provider.Issuer;
 
@@ -58,7 +60,7 @@ builder.Services.AddIntrospection();
 // Wiring a custodian is two steps, and the sample splits along them. First: WHICH custodian holds the keys. The
 // KeyCustodian setting names it, and each member's name is also its configuration section, so the section name is
 // never repeated here. Only the call itself differs, since each package has its own options type. This MUST run
-// after AddOidcMinimalApi, because the placement call below composes the external crypto backends with the in-process
+// after AddOidcServices, because the placement call below composes the external crypto backends with the in-process
 // ones the OIDC registration puts in place.
 var custodian = builder.Configuration.GetValue<KeyCustodian>("KeyCustodian");
 var placement = builder.Configuration.GetValue<UseKeysIn>("UseKeysIn");
