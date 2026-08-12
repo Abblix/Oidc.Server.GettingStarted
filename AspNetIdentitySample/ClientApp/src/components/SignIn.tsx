@@ -52,7 +52,7 @@ export default function SignIn({ requestUri, onSwitch }: SignInProps) {
       </button>
 
       <p className="text-center text-sm text-slate-500 dark:text-slate-400">
-        Don't have an account?{' '}
+        Don&apos;t have an account?{' '}
         <button type="button" onClick={onSwitch} className="font-medium text-sky-600 hover:text-sky-500 dark:text-sky-400">
           Create one
         </button>
