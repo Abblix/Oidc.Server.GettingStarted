@@ -94,7 +94,7 @@ After this, `git commit` automatically runs `actionlint` and a custom secrets-in
 
 ## 📃 License
 
-The sample code in this repository is licensed under the MIT License - see [LICENSE](LICENSE). Copy it into your own project, change it, ship it.
+The sample code in this repository is licensed under the MIT License - see [LICENSE](LICENSE). Copy it into your own project, change it, ship it. The boundary between this code and the product it demonstrates is spelled out in [NOTICE](NOTICE).
 
 Abblix OIDC Server itself is a separate product under its own licence, consumed here as a NuGet package and not redistributed in source form. Its terms are at [abblix.com/license](https://www.abblix.com/license).
 
