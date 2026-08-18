@@ -5,7 +5,7 @@
 [![OS](https://img.shields.io/badge/OS-linux%2C%20windows%2C%20macOS-0078D4)](https://docs.abblix.com/docs/technical-requirements)
 [![CPU](https://img.shields.io/badge/CPU-x86%2C%20x64%2C%20ARM%2C%20ARM64-FF8C00)](https://docs.abblix.com/docs/technical-requirements)
 [![GitHub last commit](https://img.shields.io/github/last-commit/Abblix/Oidc.Server.GettingStarted)](#)
-[![license: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+[![license: MIT](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 
 
 ⭐ Star us on GitHub - it motivates us a lot!
@@ -94,7 +94,9 @@ After this, `git commit` automatically runs `actionlint` and a custom secrets-in
 
 ## 📃 License
 
-This project is licensed under the Creative Commons Attribution 4.0 International License. You can review the full license text at the following link: [CC BY 4.0 License](https://creativecommons.org/licenses/by/4.0/).
+The sample code in this repository is licensed under the MIT License - see [LICENSE](LICENSE). Copy it into your own project, change it, ship it.
+
+Abblix OIDC Server itself is a separate product under its own licence, consumed here as a NuGet package and not redistributed in source form. Its terms are at [abblix.com/license](https://www.abblix.com/license).
 
 ## 🔗 Key Contacts & Resources
 
