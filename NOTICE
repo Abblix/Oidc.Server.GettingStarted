@@ -1,0 +1,6 @@
+The MIT licence in LICENSE covers the sample code in this repository.
+
+Abblix OIDC Server is a separate product under its own licence. The samples
+consume it as a NuGet package and do not redistribute it in source form, so
+copying a sample gives you no rights to the library itself. Its terms are at
+https://www.abblix.com/license.
