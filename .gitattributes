@@ -1,0 +1,14 @@
+# Normalize text on the way IN, so this repository never stores a carriage return.
+#
+# core.autocrlf is true on the Windows machines here and already converts on add, but that is a
+# per-machine setting: one clone configured differently is enough to store a CRLF blob. Nothing
+# repairs it afterwards - git converts on the way out only where a lone LF exists, so a blob that
+# already carries CR passes through untouched and is reproduced faithfully by every clone. This
+# line moves the guarantee into the repository, where every clone receives it.
+#
+# Binary content is exempt without being enumerated: text=auto asks git to classify it, and git
+# weighs unprintable characters rather than only looking for a NUL byte. Checked against every file
+# tracked here, including a PDF that a NUL-only heuristic calls text, by staging it under this rule
+# and comparing the blob byte for byte. An extension list would be only as complete as the list.
+* text=auto
+
