@@ -28,7 +28,7 @@ The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory
 
 ## How far the twin goes
 
-The two providers serve the same protocol surface and the same resource, and their three interactive clients are identical; this one carries `console_client` on top. They are not the same host: it has no HTTPS redirection, no static files and no home page, because none of that is what it exists to show, and `GET /` answers 404.
+Both providers are built on the same release of the library, so they publish the same discovery document field for field, and they carry the same resource and the same three interactive clients; this one adds `console_client`. Read the two documents side by side if you ever doubt it - a difference there means the two projects have drifted onto different package versions. They are not the same host: it has no HTTPS redirection, no static files and no home page, because none of that is what it exists to show, and `GET /` answers 404.
 
 One difference is worth knowing because it reaches other projects. This provider sets `Issuer` explicitly, while the MVC one derives it from the request. That is why a token minted here names `https://localhost:5006` and why ApiSample, pinned to the other address, rejects it until its own settings move.
 
