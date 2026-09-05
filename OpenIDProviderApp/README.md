@@ -10,7 +10,7 @@ OpenIDProviderApp is the OpenID Connect provider built step by step in the Getti
 - Client registrations in configuration for the sibling samples: `test_client` (TestClientApp), `bff_sample` (BffSample), and `blazor_sample` (BlazorSample), each using the authorization code flow with PKCE.
 - A `weather` resource definition that scopes the access tokens ApiSample validates.
 
-The shortcuts are deliberate: users, clients, and the RSA signing key all live in memory, so the signing key is regenerated on every restart and all state resets when the process stops. AspNetIdentitySample replaces each of these with a durable equivalent.
+The shortcuts are deliberate: the user list and the RSA signing key live in memory, so the signing key is regenerated on every restart and that state resets when the process stops. The clients survive a restart, but editing them still means editing a file the application reads at startup. AspNetIdentitySample replaces each of these with a durable equivalent.
 
 ## Running it
 
@@ -25,8 +25,8 @@ Node.js is required: the first build bundles Bootstrap for the login page with V
 
 ## Layout
 
-- `Program.cs`: `AddOidcServices`, the in-memory user, and the `weather` resource.
-- `appsettings.json`: the client registrations, in the `Oidc` section bound by `AddOidcServices`.
+- `Program.cs`: `AddOidcServices`, whose delegate binds the `Oidc` configuration section, plus the in-memory user and the `weather` resource.
+- `appsettings.json`: the client registrations, in the `Oidc` section.
 - `TestUserStorage.cs`: the in-memory user list, doubling as the `IUserInfoProvider`.
 - `Controllers/AuthController.cs` and `Views/Auth/Login.cshtml`: the login flow.
 - `ClientAssets/`: the Vite project that bundles Bootstrap into `wwwroot`.
