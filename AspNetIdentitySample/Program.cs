@@ -108,10 +108,11 @@ builder.Services.AddDataProtection()
 // AddOidcServices so the last singular registration wins.
 builder.Services.AddSingleton<IAuthServiceKeysProvider, DatabaseKeysProvider>();
 
-// Client store: decorate the read seam and replace the write seam, after AddOidcServices. The
-// library aliases its in-memory store to both client interfaces unconditionally, so a store
-// pre-registered before AddOidcServices would be silently overridden. Decorating and replacing
-// afterwards is the pattern that takes effect on this version.
+// Client store: decorate the read seam and replace the write seam, after AddOidcServices.
+// The order is what Decorate needs - it wraps the registration already in the collection, so
+// the library's own must be there first. Registering a store BEFORE would also work, since
+// the library aliases its in-memory one with TryAddAlias and a host registration wins, but
+// then there would be nothing to decorate and the layering below would have no lower layer.
 builder.Services.AddSingleton<DurableClientStore>();
 builder.Services.Decorate<IClientInfoProvider, LayeredClientInfoProvider>();
 builder.Services.RemoveAll<IClientInfoManager>();
