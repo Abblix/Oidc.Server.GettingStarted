@@ -17,7 +17,7 @@ The sample is honestly labelled. Each development-grade default (an unconfirmed 
 
 From the `Oidc.Server.GettingStarted` root:
 
-- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It is a drop-in replacement for OpenIDProviderApp: same port, same client registrations, so any of the sibling clients can point at it unchanged.
+- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It stands in for OpenIDProviderApp on the same port, and it seeds `test_client`, so TestClientApp points at it unchanged. BffSample and BlazorSample need their clients added to the store first.
 - Start a client next to it (TestClientApp on `https://localhost:5002`), follow its sign-in link, and use Register to create an account. You return to the client already signed in.
 
 On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the `test_client`. Delete the `.db` files to start from an empty store. Node.js is required: the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.

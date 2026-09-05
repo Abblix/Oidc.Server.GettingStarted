@@ -1,8 +1,0 @@
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "categories": {
-    "correctness": "error"
-  },
-  "ignorePatterns": ["dist", "src/api/schema.d.ts"]
-}

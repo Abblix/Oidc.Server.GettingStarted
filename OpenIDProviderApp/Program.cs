@@ -1,9 +1,6 @@
-using System.Security.Cryptography;
-using System.Text;
 using Abblix.DependencyInjection;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.Common.Constants;
-using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.Mvc;
 using OpenIDProviderApp;
@@ -29,37 +26,13 @@ builder.Services.AddControllersWithViews();
 // Register and configure Abblix OIDC Server
 builder.Services.AddOidcServices(options =>
 {
+    // Client registrations are loaded from the Oidc section of appsettings.json
+    builder.Configuration.Bind("Oidc", options);
+
     // options.Scopes = [new ScopeDefinition(...)];
     options.Resources =
     [
         new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
-    ];
-    options.Clients =
-    [
-        new ClientInfo("test_client") {
-            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
-            TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
-            AllowedGrantTypes = [GrantTypes.AuthorizationCode],
-            PkceRequired = true,
-            RedirectUris = [new Uri("https://localhost:5002/signin-oidc", UriKind.Absolute)],
-            PostLogoutRedirectUris = [new Uri("https://localhost:5002/signout-callback-oidc", UriKind.Absolute)],
-        },
-        new ClientInfo("bff_sample") {
-            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
-            TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
-            AllowedGrantTypes = [GrantTypes.AuthorizationCode],
-            PkceRequired = true,
-            RedirectUris = [new Uri("https://localhost:5003/signin-oidc", UriKind.Absolute)],
-            PostLogoutRedirectUris = [new Uri("https://localhost:5003/signout-callback-oidc", UriKind.Absolute)],
-        },
-        new ClientInfo("blazor_sample") {
-            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
-            TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
-            AllowedGrantTypes = [GrantTypes.AuthorizationCode],
-            PkceRequired = true,
-            RedirectUris = [new Uri("https://localhost:5005/signin-oidc", UriKind.Absolute)],
-            PostLogoutRedirectUris = [new Uri("https://localhost:5005/signout-callback-oidc", UriKind.Absolute)],
-        }
     ];
     options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);
     options.SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)];
