@@ -8,13 +8,37 @@ var builder = WebApplication.CreateBuilder(args);
 
 var configuration = builder.Configuration;
 
+// The API this BFF forwards to, named twice: to the provider as the resource an access token is
+// minted for, and to the forwarder as the address the proxied calls go to.
+const string ResourceKey = "OpenIdConnect:Resource";
+
+// RFC 8707 section 2. Microsoft's OpenID Connect handler has no property for it.
+const string ResourceParameter = "resource";
+
 builder.Services
     .AddAuthorization()
     .AddAuthentication(options => configuration.Bind("Authentication", options))
     // Cookie hardening required of a BFF by draft-ietf-oauth-browser-based-apps section 6.1.3
     // is configured under the "Cookies" section: __Host- name, Secure, HttpOnly, SameSite=Strict.
     .AddCookie(options => configuration.Bind("Cookies", options))
-    .AddOpenIdConnect(options => configuration.Bind("OpenIdConnect", options));
+    .AddOpenIdConnect(options =>
+    {
+        configuration.Bind("OpenIdConnect", options);
+
+        // The weather scope belongs to a protected resource, and RFC 8707 section 2 names that
+        // resource with the "resource" request parameter. The provider resolves a scope against
+        // the resources the request names, so without this the authorization request comes back
+        // refused with invalid_scope. Microsoft's handler exposes no property for the parameter,
+        // so it is set on the outgoing message.
+        options.Events.OnRedirectToIdentityProvider = context =>
+        {
+            var resource = configuration[ResourceKey];
+            if (!string.IsNullOrEmpty(resource))
+                context.ProtocolMessage.SetParameter(ResourceParameter, resource);
+
+            return Task.CompletedTask;
+        };
+    });
 
 builder.Services.AddControllers();
 builder.Services.AddHttpForwarder();
@@ -52,9 +76,8 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-const string key = "OpenIdConnect:Resource";
-var destinationPrefix = configuration.GetValue<string>(key)
-                        ?? throw new InvalidOperationException($"The value {key} must be set");
+var destinationPrefix = configuration.GetValue<string>(ResourceKey)
+                        ?? throw new InvalidOperationException($"The value {ResourceKey} must be set");
 
 app.MapForwarder(
     "/bff/{**catch-all}",
