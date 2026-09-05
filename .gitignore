@@ -37,10 +37,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+yarn.lock
 
 # Vite writes a temporary dependency cache here on every dev run.
 .vite/
-yarn.lock
 
 # Ignore dotenv environment variables file
 .env

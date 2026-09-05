@@ -111,8 +111,9 @@ builder.Services.AddSingleton<IAuthServiceKeysProvider, DatabaseKeysProvider>();
 // Client store: decorate the read seam and replace the write seam, after AddOidcServices.
 // The order is what Decorate needs - it wraps the registration already in the collection, so
 // the library's own must be there first. Registering a store BEFORE would also work, since
-// the library aliases its in-memory one with TryAddAlias and a host registration wins, but
-// then there would be nothing to decorate and the layering below would have no lower layer.
+// the library aliases its in-memory one with TryAddAlias and a host registration wins - but
+// then the decorator would wrap this store rather than the library's, and the clients from
+// configuration would quietly disappear instead of being the layer underneath.
 builder.Services.AddSingleton<DurableClientStore>();
 builder.Services.Decorate<IClientInfoProvider, LayeredClientInfoProvider>();
 builder.Services.RemoveAll<IClientInfoManager>();
