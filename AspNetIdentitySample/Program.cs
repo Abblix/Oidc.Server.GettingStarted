@@ -185,17 +185,35 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
+    // The same clients OpenIDProviderApp registers, so this sample is a drop-in replacement for it:
+    // any client in the solution reaches it on the same port with no change of its own. Here they
+    // are rows in SQLite that survive a restart and can be added to at runtime, there they are
+    // configuration read at startup. This sample does not enable dynamic client registration, so
+    // the rows are written only by the seeding below.
     var clients = scope.ServiceProvider.GetRequiredService<DurableClientStore>();
-    if (await clients.TryFindClientAsync("test_client") is null)
+    foreach (var (clientId, port, claimsInIdentityToken) in new[]
+             {
+                 ("test_client", 5002, false),
+
+                 // BffSample asks for a token addressed to the API, which the userinfo endpoint
+                 // then refuses, so its profile claims have to travel in the ID token.
+                 ("bff_sample", 5003, true),
+
+                 ("blazor_sample", 5005, false),
+             })
     {
-        await clients.AddClientAsync(new ClientInfo("test_client")
+        if (await clients.TryFindClientAsync(clientId) is not null)
+            continue;
+
+        await clients.AddClientAsync(new ClientInfo(clientId)
         {
             ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
             AllowedGrantTypes = [GrantTypes.AuthorizationCode],
             PkceRequired = true,
-            RedirectUris = [new Uri("https://localhost:5002/signin-oidc", UriKind.Absolute)],
-            PostLogoutRedirectUris = [new Uri("https://localhost:5002/signout-callback-oidc", UriKind.Absolute)],
+            RedirectUris = [new Uri($"https://localhost:{port}/signin-oidc", UriKind.Absolute)],
+            PostLogoutRedirectUris = [new Uri($"https://localhost:{port}/signout-callback-oidc", UriKind.Absolute)],
+            ForceUserClaimsInIdentityToken = claimsInIdentityToken,
         });
     }
 }
