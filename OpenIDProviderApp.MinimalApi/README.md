@@ -6,7 +6,7 @@
 
 - Registering the server with `AddOidcServices`, whose delegate binds the `Oidc` configuration section, and mapping the protocol endpoints with `app.MapOidcEndpoints()`.
 - A login screen built from `MapGet("/Auth/Login")` and `MapPost`, resuming the paused authorization request through the `request_uri` the library hands it.
-- The same client registrations and the same `weather` resource as the MVC provider, so a client is moved between the two by pointing it at a different address.
+- The same three interactive clients and the same `weather` resource as the MVC provider, so a client is moved between the two by pointing it at a different address. That is the whole move for signing users in; one that also calls ApiSample needs the change described under Running it.
 - A `client_credentials` client for headless checks, which the MVC provider does not carry.
 
 ## Running it
@@ -28,7 +28,9 @@ The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory
 
 ## How far the twin goes
 
-The two providers answer the protocol identically: same clients, same resource, same grants. They are not the same host. This one has no HTTPS redirection, no static files, no exception page and no home page, because none of that is what it exists to show; `GET /` answers 404.
+The two providers serve the same protocol surface and the same resource, and their three interactive clients are identical; this one carries `console_client` on top. They are not the same host: it has no HTTPS redirection, no static files and no home page, because none of that is what it exists to show, and `GET /` answers 404.
+
+One difference is worth knowing because it reaches other projects. This provider sets `Issuer` explicitly, while the MVC one derives it from the request. That is why a token minted here names `https://localhost:5006` and why ApiSample, pinned to the other address, rejects it until its own settings move.
 
 ## The guides behind this sample
 
