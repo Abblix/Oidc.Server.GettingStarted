@@ -1,6 +1,6 @@
 # OpenID Provider: the identity server from the Getting Started guide
 
-OpenIDProviderApp is the OpenID Connect provider built step by step in the Getting Started guide. It authenticates users, manages their sessions, and issues ID, access, and refresh tokens to registered clients, using Abblix OIDC Server for the whole protocol surface. It needs no database and no external setup, keeping its users in memory and its clients in the configuration file: read it end to end, then graduate to AspNetIdentitySample when you want the same provider backed by a real user store.
+OpenIDProviderApp is the OpenID Connect provider built step by step in the Getting Started guide. It authenticates users, manages their sessions, and issues ID, access, and refresh tokens to registered clients, using Abblix OIDC Server for the whole protocol surface. It needs no database and no external services, keeping its demo user in memory and its clients in the configuration file: read it end to end, then graduate to AspNetIdentitySample when you want the same provider backed by a real user store.
 
 ## What it demonstrates
 
