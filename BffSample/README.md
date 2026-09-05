@@ -25,7 +25,7 @@ The sample is one client in a small constellation. Start these projects (each in
 - `dotnet run --project ApiSample` : the protected weather API on `https://localhost:5004`.
 - `dotnet run --project BffSample` : the BFF backend on `https://localhost:5003`. It launches the Vite dev server automatically.
 
-Then open `https://localhost:5003`. You are redirected to the provider to sign in (with OpenIDProviderApp the demo user is `john.doe@example.com`; with AspNetIdentitySample, register an account from the link on its sign-in screen first), and land back on the SPA showing your claims and the weather forecast pulled through the BFF.
+Then open `https://localhost:5003`. You are redirected to the provider to sign in (with OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, create an account first with Create one on its sign-in screen), and land back on the SPA showing your claims and the weather forecast pulled through the BFF.
 
 Node.js is required to build and run the SPA; the backend restores npm packages on first build.
 
