@@ -57,9 +57,18 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
 
     // The checkSession function is responsible for verifying the user session on initial render
     const checkSession = useCallback(async (): Promise<void> => {
+        let response: Response;
         try {
-            const response = await fetchBff('check_session');
+            response = await fetchBff('check_session');
+        } catch (cause) {
+            // The BFF not running, a rejected certificate: anything that stops the request from
+            // being answered at all.
+            console.error('Session check failed:', cause);
+            setSessionError('the BFF could not be reached - is it running?');
+            return;
+        }
 
+        try {
             if (response.ok) {
                 // If the session is valid, update the user state with the received claims data
                 setUser(await response.json());
@@ -72,10 +81,10 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
                 setSessionError(`the BFF answered ${response.status}`);
             }
         } catch (cause) {
-            // Anything else - the BFF not running, a rejected certificate - would otherwise leave
-            // the panel saying it is still checking, with the reason only in the console.
-            console.error('Session check failed:', cause);
-            setSessionError('the BFF could not be reached - is it running?');
+            // A 200 whose body is not JSON lands here, and it is a different fault from an
+            // unreachable BFF: say so rather than blaming the process that did answer.
+            console.error('Session response could not be read:', cause);
+            setSessionError('the BFF answered something that is not JSON');
         }
     }, [fetchBff, login]);
 

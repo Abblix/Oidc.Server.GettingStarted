@@ -27,6 +27,10 @@ export const WeatherForecast: React.FC = () => {
             setState({ forecasts: [], loading: false, error: message });
         };
 
+        // Remembers that a redirect already sent us to sign in once, so a second one is
+        // reported rather than followed.
+        const retriedKey = 'bff.weatherforecast.retried';
+
         // redirect: 'manual' is what makes an expired session visible. The forwarder sits behind
         // RequireAuthorization with OpenIdConnect as the challenge scheme, so a request without a
         // session is answered with a 302 to the provider rather than a 401 - and a browser fetch
@@ -34,10 +38,21 @@ export const WeatherForecast: React.FC = () => {
         // error that says nothing. Caught here, the redirect means what it is: sign in again.
         fetchBff('weatherforecast', { redirect: 'manual' })
             .then(async response => {
-                if (response.type === 'opaqueredirect' || response.status === 302) {
+                if (response.type === 'opaqueredirect') {
+                    // One attempt only. A redirect answered to a session that IS valid would
+                    // otherwise bounce the reader through the provider forever with nothing on
+                    // screen - the same silent failure this panel exists to end.
+                    if (sessionStorage.getItem(retriedKey)) {
+                        fail('the BFF keeps asking for a new sign-in - check its session cookie');
+                        return;
+                    }
+
+                    sessionStorage.setItem(retriedKey, '1');
                     login();
                     return;
                 }
+
+                sessionStorage.removeItem(retriedKey);
 
                 if (!response.ok) {
                     // Both codes come from the API rather than from the BFF: 401 when it will not
