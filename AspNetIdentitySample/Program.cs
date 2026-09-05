@@ -2,19 +2,28 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Abblix.DependencyInjection;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
 using Abblix.Oidc.Server.Features.ClientInformation;
+using Abblix.Oidc.Server.Features.RandomGenerators;
+using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
-using Abblix.Oidc.Server.Mvc;
+using Abblix.Oidc.Server.MinimalApi;
+using Abblix.Oidc.Server.Model;
 using AspNetIdentitySample;
+using AspNetIdentitySample.Models;
 using AspNetIdentitySample.OidcStore;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,26 +50,30 @@ builder.Services.Configure<PasswordHasherOptions>(builder.Configuration.GetSecti
 // The library ships no IUserInfoProvider: this registration is mandatory, not optional.
 builder.Services.AddScoped<IUserInfoProvider, IdentityUserInfoProvider>();
 
-// Add services to the container.
-builder.Services.AddControllersWithViews();
+// A Minimal API host has no MVC, so the services the request pipeline and the auth UI rely on are
+// registered directly (the MVC host got these transitively from AddControllersWithViews).
+builder.Services.AddAuthorization();
+builder.Services.AddCors();
+builder.Services.AddMemoryCache();
 
-// The React auth SPA posts JSON and echoes the antiforgery request token in this header; the
-// [ValidateAntiForgeryToken] endpoints validate it against the paired HttpOnly cookie.
+// The React auth SPA posts JSON and echoes the antiforgery request token in this header; the auth
+// endpoints validate it against the paired HttpOnly cookie.
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 
 // Emit an OpenAPI document from the auth endpoints. It is the contract the React client generates its
 // TypeScript types from, so the two sides cannot silently drift. Served at /openapi/v1.json in
-// development; the client regenerates its types from it with `npm run gen:api` (see ClientApp), and
-// the generated schema is committed. Runtime emission is used deliberately over build-time emission,
-// which would run this app's startup (EnsureCreated + store seeding) as a build side effect.
+// development; the client regenerates its types from it with `npm run gen:api` (see ClientApp).
 builder.Services.AddOpenApi(options =>
     // Scope the document to the auth API. The client only generates types for its own contract, so the
     // library's OIDC protocol endpoints stay out of the generated schema and it stays small.
     options.ShouldInclude = description => description.RelativePath?.StartsWith("api/auth") ?? false);
 
-// Register and configure Abblix OIDC Server
+// Register and configure Abblix OIDC Server through the Minimal API adapter: the same framework-neutral
+// core the MVC integration registers, with a different transport. The endpoints are mapped later with
+// app.MapOidcEndpoints().
 builder.Services.AddOidcServices(options =>
 {
+    options.Issuer = "https://localhost:5001";
     options.Resources =
     [
         new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
@@ -95,10 +108,12 @@ builder.Services.AddDataProtection()
 // AddOidcServices so the last singular registration wins.
 builder.Services.AddSingleton<IAuthServiceKeysProvider, DatabaseKeysProvider>();
 
-// Client store: decorate the read seam and replace the write seam, after AddOidcServices. The
-// library aliases its in-memory store to both client interfaces unconditionally, so a store
-// pre-registered before AddOidcServices would be silently overridden. Decorating and replacing
-// afterwards is the pattern that takes effect on this version.
+// Client store: decorate the read seam and replace the write seam, after AddOidcServices.
+// The order is what Decorate needs - it wraps the registration already in the collection, so
+// the library's own must be there first. Registering a store BEFORE would also work, since
+// the library aliases its in-memory one with TryAddAlias and a host registration wins - but
+// then the decorator would wrap this store rather than the library's, and the clients from
+// configuration would quietly disappear instead of being the layer underneath.
 builder.Services.AddSingleton<DurableClientStore>();
 builder.Services.Decorate<IClientInfoProvider, LayeredClientInfoProvider>();
 builder.Services.RemoveAll<IClientInfoManager>();
@@ -133,8 +148,8 @@ builder.Services
 
 var app = builder.Build();
 
-// Create the Identity schema so the signup form has tables to write to. Nothing is seeded here:
-// users register themselves through /Auth/Register (see AuthController), so the very first thing a
+// Create the Identity schema so the sign-up form has tables to write to. Nothing is seeded here:
+// users register themselves through /Auth/Register (the endpoints below), so the very first thing a
 // fresh run asks for is a sign-up. A real deployment replaces EnsureCreated with EF migrations.
 using (var scope = app.Services.CreateScope())
 {
@@ -188,7 +203,6 @@ using (var scope = app.Services.CreateScope())
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
@@ -199,15 +213,176 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
+app.UseAntiforgery();
 
-// Attribute-routed controllers: the JSON auth API (/api/auth/*) and the SPA host routes (/Auth/*).
-app.MapControllers();
+// The OIDC protocol endpoints (discovery, authorize, token, userinfo, end-session, ...): the Minimal
+// API counterpart of the MVC host's app.MapControllers().
+app.MapOidcEndpoints();
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+// The auth UI. The OIDC library redirects an unauthenticated user to LoginUri (/Auth/Login); both auth
+// routes return the same React SPA, which reads request_uri from the query and posts to the JSON API
+// below. Serving the page issues the antiforgery request token in a JS-readable cookie the SPA echoes.
+app.MapGet("/Auth/Login", ServeAuthSpa);
+app.MapGet("/Auth/Register", ServeAuthSpa);
+
+// The JSON contract the SPA talks to. The group filter validates the antiforgery header on every POST.
+var authApi = app.MapGroup("/api/auth");
+authApi.AddEndpointFilter(ValidateAntiforgeryAsync);
+authApi.MapPost("/login", LoginAsync)
+    .Produces<AuthSuccessResponse>()
+    .ProducesValidationProblem();
+authApi.MapPost("/register", RegisterAsync)
+    .Produces<AuthSuccessResponse>()
+    .ProducesValidationProblem();
 
 app.Run();
+
+// Serves the built React SPA (wwwroot/auth) and issues the antiforgery request token in a JS-readable
+// cookie. The SPA echoes it in the X-CSRF-TOKEN header on every POST; a server-rendered form did this
+// with a hidden field, but a SPA has to perform the handshake explicitly.
+static async Task<IResult> ServeAuthSpa(IAntiforgery antiforgery, HttpContext http, IWebHostEnvironment environment)
+{
+    var tokens = antiforgery.GetAndStoreTokens(http);
+    http.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
+    {
+        HttpOnly = false,
+        Secure = true,
+        SameSite = SameSiteMode.Strict,
+        Path = "/",
+    });
+
+    var indexHtml = System.IO.Path.Combine(environment.WebRootPath, "auth", "index.html");
+    return Results.Content(await File.ReadAllTextAsync(indexHtml), "text/html");
+}
+
+// A JSON POST to a Minimal API endpoint gets no automatic antiforgery, so validate the header token
+// (against the paired HttpOnly cookie) here and shape a failure as a 400, not the default 500.
+static async ValueTask<object?> ValidateAntiforgeryAsync(
+    EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+{
+    var antiforgery = context.HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
+    try
+    {
+        await antiforgery.ValidateRequestAsync(context.HttpContext);
+    }
+    catch (AntiforgeryValidationException)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [string.Empty] = ["Antiforgery validation failed. Reload the page and try again."],
+        });
+    }
+
+    return await next(context);
+}
+
+// POST /api/auth/login. Identity verifies the password (hash, lockout) but issues no cookie; on success
+// the library session is established and the authorize URL is returned for the SPA to follow.
+static async Task<IResult> LoginAsync(
+    LoginRequest request,
+    IAuthSessionService authService,
+    ISessionIdGenerator sessionIdGenerator,
+    UserManager<IdentityUser> userManager,
+    SignInManager<IdentityUser> signIn,
+    TimeProvider clock,
+    IOptions<OidcRouteOptions> routeOptions)
+{
+    var user = await userManager.FindByEmailAsync(request.Email);
+
+    var result = user is not null
+        ? await signIn.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true)
+        : SignInResult.Failed;
+
+    if (!result.Succeeded)
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["password"] = ["Invalid email or password."],
+        });
+
+    var redirectUrl = await SignInAndBuildResumeUrl(
+        authService, sessionIdGenerator, userManager, clock, routeOptions.Value, user!, request.RequestUri);
+    return Results.Ok(new AuthSuccessResponse { RedirectUrl = redirectUrl });
+}
+
+// POST /api/auth/register. Creates the account through UserManager (salted PBKDF2 hash, unique-email and
+// password policy enforced), writes the profile name into Identity's claim store, then signs in and
+// resumes the OIDC flow. There is no seeded user; this is how the first account is created.
+static async Task<IResult> RegisterAsync(
+    RegisterRequest request,
+    IAuthSessionService authService,
+    ISessionIdGenerator sessionIdGenerator,
+    UserManager<IdentityUser> userManager,
+    TimeProvider clock,
+    IOptions<OidcRouteOptions> routeOptions)
+{
+    // Minimal API does not auto-run the model's data annotations, so check the one that UserManager
+    // cannot: that the two password boxes match.
+    if (request.Password != request.ConfirmPassword)
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["confirmPassword"] = ["The password and its confirmation do not match."],
+        });
+
+#warning DEV shortcut: sign-up leaves the address unconfirmed, so email_verified is honestly false, yet still lets the account sign in. A real deployment emails a confirmation link and only trusts the address once the user proves control of the mailbox.
+    var user = new IdentityUser
+    {
+        UserName = request.Email,
+        Email = request.Email,
+        EmailConfirmed = false,
+    };
+
+    var created = await userManager.CreateAsync(user, request.Password);
+    if (!created.Succeeded)
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            // Surface Identity's own messages (password too short, email already taken, ...) inline.
+            ["password"] = created.Errors.Select(error => error.Description).ToArray(),
+        });
+
+    // profile claims Identity does not model live in its claim store; the IdentityUserInfoProvider
+    // surfaces them when the profile scope asks.
+    await userManager.AddClaimAsync(user, new Claim("name", request.Name));
+
+    var redirectUrl = await SignInAndBuildResumeUrl(
+        authService, sessionIdGenerator, userManager, clock, routeOptions.Value, user, request.RequestUri);
+    return Results.Ok(new AuthSuccessResponse { RedirectUrl = redirectUrl });
+}
+
+// Login and sign-up share their tail: establish the library session, then return the authorize URL that
+// resumes the OIDC flow the user was pulled out of. The Minimal API adapter has no MVC route-token
+// table, so the route comes from OidcRouteOptions (its Authorize defaults to /connect/authorize).
+static async Task<string> SignInAndBuildResumeUrl(
+    IAuthSessionService authService,
+    ISessionIdGenerator sessionIdGenerator,
+    UserManager<IdentityUser> userManager,
+    TimeProvider clock,
+    OidcRouteOptions routes,
+    IdentityUser user,
+    string? requestUri)
+{
+    var authSession = new AuthSession(
+        user.Id,                                             // the subject the claims adapter resolves later
+        sessionIdGenerator.GenerateSessionId(),
+        clock.GetUtcNow(),
+        CookieAuthenticationDefaults.AuthenticationScheme)
+    {
+        Email = user.Email,
+        EmailVerified = user.EmailConfirmed,
+        AuthenticationMethodReferences = ["pwd"],            // lands in the amr claim
+
+        // snapshot the security stamp: the cookie's OnValidatePrincipal compares it on every
+        // request, so a password change or UpdateSecurityStampAsync ends this session
+        AdditionalClaims = new JsonObject
+        {
+            ["security_stamp"] = await userManager.GetSecurityStampAsync(user),
+        },
+    };
+
+    await authService.SignInAsync(authSession);
+
+    return QueryHelpers.AddQueryString(
+        routes.Authorize, AuthorizationRequest.Parameters.RequestUri, requestUri ?? string.Empty);
+}

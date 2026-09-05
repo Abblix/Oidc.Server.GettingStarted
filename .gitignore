@@ -39,6 +39,9 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
+# Vite writes a temporary dependency cache here on every dev run.
+.vite/
+
 # Ignore dotenv environment variables file
 .env
 
