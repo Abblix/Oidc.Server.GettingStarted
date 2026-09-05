@@ -187,8 +187,9 @@ using (var scope = app.Services.CreateScope())
 
     // The same clients OpenIDProviderApp registers, so this sample is a drop-in replacement for it:
     // any client in the solution reaches it on the same port with no change of its own. Here they
-    // are rows in SQLite that survive a restart and are edited through the registration endpoint,
-    // there they are configuration read at startup.
+    // are rows in SQLite that survive a restart and can be added to at runtime, there they are
+    // configuration read at startup. This sample does not enable dynamic client registration, so
+    // the rows are written only by the seeding below.
     var clients = scope.ServiceProvider.GetRequiredService<DurableClientStore>();
     foreach (var (clientId, port, claimsInIdentityToken) in new[]
              {
