@@ -15,7 +15,7 @@ It registers with the provider as `blazor_sample`, redirect URI `https://localho
 
 From the `Oidc.Server.GettingStarted` root:
 
-- `dotnet run --project OpenIDProviderApp` starts the provider on `https://localhost:5001`.
+- `dotnet run --project OpenIDProviderApp` starts the provider on `https://localhost:5001`. `AspNetIdentitySample` stands in for it on the same port, with an account you register on its first screen instead of the demo user.
 - `dotnet run --project BlazorSample` starts the Blazor app on `https://localhost:5005`.
 
 Open `https://localhost:5005` and sign in (demo user `john.doe@example.com` / `Jd!2024$3cur3`). No Node.js is needed: this sample has no client-side bundling step.

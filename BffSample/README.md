@@ -21,7 +21,7 @@ The forwarding is done with [YARP](https://microsoft.github.io/reverse-proxy/); 
 
 The sample is one client in a small constellation. Start these projects (each in its own terminal, from the `Oidc.Server.GettingStarted` root):
 
-- `dotnet run --project OpenIDProviderApp` : the OpenID Connect provider on `https://localhost:5001`.
+- `dotnet run --project OpenIDProviderApp` : the OpenID Connect provider on `https://localhost:5001`. `AspNetIdentitySample` works here too, on the same port, with an account you register on its first screen instead of the demo user.
 - `dotnet run --project ApiSample` : the protected weather API on `https://localhost:5004`.
 - `dotnet run --project BffSample` : the BFF backend on `https://localhost:5003`. It launches the Vite dev server automatically.
 

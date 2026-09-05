@@ -186,13 +186,18 @@ using (var scope = app.Services.CreateScope())
     }
 
     // The same clients OpenIDProviderApp registers, so this sample is a drop-in replacement for it:
-    // any client in the solution reaches it on the same port with no change of its own. They differ
-    // only in where they live - a row in SQLite here, a line of configuration there.
+    // any client in the solution reaches it on the same port with no change of its own. Here they
+    // are rows in SQLite that survive a restart and are edited through the registration endpoint,
+    // there they are configuration read at startup.
     var clients = scope.ServiceProvider.GetRequiredService<DurableClientStore>();
     foreach (var (clientId, port, claimsInIdentityToken) in new[]
              {
                  ("test_client", 5002, false),
+
+                 // BffSample asks for a token addressed to the API, which the userinfo endpoint
+                 // then refuses, so its profile claims have to travel in the ID token.
                  ("bff_sample", 5003, true),
+
                  ("blazor_sample", 5005, false),
              })
     {
@@ -207,9 +212,6 @@ using (var scope = app.Services.CreateScope())
             PkceRequired = true,
             RedirectUris = [new Uri($"https://localhost:{port}/signin-oidc", UriKind.Absolute)],
             PostLogoutRedirectUris = [new Uri($"https://localhost:{port}/signout-callback-oidc", UriKind.Absolute)],
-
-            // BffSample asks for a token addressed to the API, which the userinfo endpoint then
-            // refuses, so its profile claims have to travel in the ID token.
             ForceUserClaimsInIdentityToken = claimsInIdentityToken,
         });
     }
