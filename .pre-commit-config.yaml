@@ -25,6 +25,6 @@ repos:
         name: "Block inline untrusted-input interpolation in run: blocks"
         entry: python .github/scripts/lint-no-inline-secrets.py
         language: python
-        additional_dependencies: [pyyaml]
+        additional_dependencies: [pyyaml==6.0.3]
         files: ^\.github/(workflows/.*\.(yml|yaml)|scripts/lint-no-inline-secrets\.py)$
         pass_filenames: false
