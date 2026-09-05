@@ -105,12 +105,12 @@ builder.Services.AddDataProtection()
 
 // Signing keys: replace the ephemeral in-memory default (OidcOptionsKeysProvider, which would
 // generate a new key on every startup) with the database-backed provider. Registered after
-// AddOidcMinimalApi so the last singular registration wins.
+// AddOidcServices so the last singular registration wins.
 builder.Services.AddSingleton<IAuthServiceKeysProvider, DatabaseKeysProvider>();
 
-// Client store: decorate the read seam and replace the write seam, after AddOidcMinimalApi. The
+// Client store: decorate the read seam and replace the write seam, after AddOidcServices. The
 // library aliases its in-memory store to both client interfaces unconditionally, so a store
-// pre-registered before AddOidcMinimalApi would be silently overridden. Decorating and replacing
+// pre-registered before AddOidcServices would be silently overridden. Decorating and replacing
 // afterwards is the pattern that takes effect on this version.
 builder.Services.AddSingleton<DurableClientStore>();
 builder.Services.Decorate<IClientInfoProvider, LayeredClientInfoProvider>();
