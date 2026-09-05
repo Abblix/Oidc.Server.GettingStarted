@@ -11,44 +11,67 @@ interface Forecast {
 interface State {
     forecasts: Forecast[];
     loading: boolean;
+    error: string | null;
 }
 
 export const WeatherForecast: React.FC = () => {
     const { fetchBff } = useBff();
-    const [state, setState] = useState<State>({ forecasts: [], loading: true });
-    const { forecasts, loading } = state;
+    const [state, setState] = useState<State>({ forecasts: [], loading: true, error: null });
+    const { forecasts, loading, error } = state;
 
     useEffect(() => {
+        // A refused call answers with a status and an empty body, so parsing before checking turns
+        // every refusal into a JSON error and leaves the panel loading forever. The status is the
+        // interesting part: 401 means the session went away, 403 that the token lacks the scope the
+        // API wants, and anything else is worth showing rather than swallowing.
         fetchBff('weatherforecast')
-            .then(response => response.json())
-            .then(data => setState({forecasts: data, loading: false}));
-    }, [fetchBff]);
+            .then(async response => {
+                if (!response.ok) {
+                    const reason = response.status === 401
+                        ? 'the session is gone - sign in again'
+                        : response.status === 403
+                            ? 'the access token is not accepted by the API'
+                            : `the API answered ${response.status}`;
 
+                    setState({ forecasts: [], loading: false, error: reason });
+                    return;
+                }
+
+                setState({ forecasts: await response.json(), loading: false, error: null });
+            })
+            .catch(() => setState({
+                forecasts: [],
+                loading: false,
+                error: 'the BFF could not be reached - is it running?',
+            }));
+    }, [fetchBff]);
 
     const contents = loading
         ? <p className="status">Loading...</p>
-        : (
-            <table className="table" aria-labelledby="tableLabel">
-                <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Temp. (C)</th>
-                    <th>Temp. (F)</th>
-                    <th>Summary</th>
-                </tr>
-                </thead>
-                <tbody>
-                {forecasts.map((forecast, index) => (
-                    <tr key={index}>
-                        <td>{forecast.date}</td>
-                        <td>{forecast.temperatureC}</td>
-                        <td>{forecast.temperatureF}</td>
-                        <td>{forecast.summary}</td>
+        : error
+            ? <p className="status">No forecast: {error}</p>
+            : (
+                <table className="table" aria-labelledby="tableLabel">
+                    <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Temp. (C)</th>
+                        <th>Temp. (F)</th>
+                        <th>Summary</th>
                     </tr>
-                ))}
-                </tbody>
-            </table>
-        );
+                    </thead>
+                    <tbody>
+                    {forecasts.map((forecast, index) => (
+                        <tr key={index}>
+                            <td>{forecast.date}</td>
+                            <td>{forecast.temperatureC}</td>
+                            <td>{forecast.temperatureF}</td>
+                            <td>{forecast.summary}</td>
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
+            );
 
     return (
         <div>
