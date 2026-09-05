@@ -15,36 +15,48 @@ interface State {
 }
 
 export const WeatherForecast: React.FC = () => {
-    const { fetchBff } = useBff();
+    const { fetchBff, login } = useBff();
     const [state, setState] = useState<State>({ forecasts: [], loading: true, error: null });
     const { forecasts, loading, error } = state;
 
     useEffect(() => {
-        // A refused call answers with a status and an empty body, so parsing before checking turns
-        // every refusal into a JSON error and leaves the panel loading forever. The status is the
-        // interesting part: 401 means the session went away, 403 that the token lacks the scope the
-        // API wants, and anything else is worth showing rather than swallowing.
-        fetchBff('weatherforecast')
-            .then(async response => {
-                if (!response.ok) {
-                    const reason = response.status === 401
-                        ? 'the session is gone - sign in again'
-                        : response.status === 403
-                            ? 'the access token is not accepted by the API'
-                            : `the API answered ${response.status}`;
+        const fail = (message: string, cause?: unknown) => {
+            // Keep the original in the console: the message on screen is for the reader, the cause
+            // is for whoever debugs it.
+            if (cause) console.error('Weather forecast call failed:', cause);
+            setState({ forecasts: [], loading: false, error: message });
+        };
 
-                    setState({ forecasts: [], loading: false, error: reason });
+        // redirect: 'manual' is what makes an expired session visible. The forwarder sits behind
+        // RequireAuthorization with OpenIdConnect as the challenge scheme, so a request without a
+        // session is answered with a 302 to the provider rather than a 401 - and a browser fetch
+        // that follows it lands on a cross-origin page with no CORS headers, failing as a network
+        // error that says nothing. Caught here, the redirect means what it is: sign in again.
+        fetchBff('weatherforecast', { redirect: 'manual' })
+            .then(async response => {
+                if (response.type === 'opaqueredirect' || response.status === 302) {
+                    login();
                     return;
                 }
 
-                setState({ forecasts: await response.json(), loading: false, error: null });
+                if (!response.ok) {
+                    // Both codes come from the API rather than from the BFF: 401 when it will not
+                    // accept the token at all (expired, wrong audience, wrong issuer), 403 when it
+                    // accepts the token but the weather scope is missing.
+                    fail(response.status === 401 || response.status === 403
+                        ? `the API did not accept the access token (${response.status})`
+                        : `the API answered ${response.status}`);
+                    return;
+                }
+
+                try {
+                    setState({ forecasts: await response.json(), loading: false, error: null });
+                } catch (cause) {
+                    fail('the API answered something that is not JSON', cause);
+                }
             })
-            .catch(() => setState({
-                forecasts: [],
-                loading: false,
-                error: 'the BFF could not be reached - is it running?',
-            }));
-    }, [fetchBff]);
+            .catch(cause => fail('the BFF could not be reached - is it running?', cause));
+    }, [fetchBff, login]);
 
     const contents = loading
         ? <p className="status">Loading...</p>

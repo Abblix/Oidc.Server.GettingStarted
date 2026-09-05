@@ -5,6 +5,7 @@ type UserClaims = Record<string, unknown>;
 // Define the shape of the BFF context
 interface BffContextProps {
     user: UserClaims | null;
+    sessionError: string | null;
     fetchBff: (endpoint: string, options?: RequestInit) => Promise<Response>;
     checkSession: () => Promise<void>;
     login: () => void;
@@ -14,6 +15,7 @@ interface BffContextProps {
 // Creating a context for BFF to share state and functions across the application
 const BffContext = createContext<BffContextProps>({
     user: null,
+    sessionError: null,
     fetchBff: async () => new Response(),
     checkSession: async () => {},
     login: () => {},
@@ -27,6 +29,7 @@ interface BffProviderProps {
 
 export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
     const [user, setUser] = useState<UserClaims | null>(null);
+    const [sessionError, setSessionError] = useState<string | null>(null);
 
     // Normalize the base URL by removing a trailing slash to avoid inconsistent URLs
     const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
@@ -54,16 +57,25 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
 
     // The checkSession function is responsible for verifying the user session on initial render
     const checkSession = useCallback(async (): Promise<void> => {
-        const response = await fetchBff('check_session');
+        try {
+            const response = await fetchBff('check_session');
 
-        if (response.ok) {
-            // If the session is valid, update the user state with the received claims data
-            setUser(await response.json());
-        } else if (response.status === 401) {
-            // If the user is not authenticated, redirect him to the login page
-            login();
-        } else {
-            console.error('Unexpected response from checking session:', response);
+            if (response.ok) {
+                // If the session is valid, update the user state with the received claims data
+                setUser(await response.json());
+                setSessionError(null);
+            } else if (response.status === 401) {
+                // If the user is not authenticated, redirect him to the login page
+                login();
+            } else {
+                console.error('Unexpected response from checking session:', response);
+                setSessionError(`the BFF answered ${response.status}`);
+            }
+        } catch (cause) {
+            // Anything else - the BFF not running, a rejected certificate - would otherwise leave
+            // the panel saying it is still checking, with the reason only in the console.
+            console.error('Session check failed:', cause);
+            setSessionError('the BFF could not be reached - is it running?');
         }
     }, [fetchBff, login]);
 
@@ -80,7 +92,7 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
 
     return (
         // Providing the BFF context with relevant values and functions to be used across the application
-        <BffContext.Provider value={{ user, fetchBff, checkSession, login, logout }}>
+        <BffContext.Provider value={{ user, sessionError, fetchBff, checkSession, login, logout }}>
             {children}
         </BffContext.Provider>
     );
