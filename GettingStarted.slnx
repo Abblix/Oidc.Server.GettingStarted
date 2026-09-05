@@ -4,5 +4,6 @@
   <Project Path="BffSample/BffSample.csproj" />
   <Project Path="BlazorSample/BlazorSample.csproj" />
   <Project Path="OpenIDProviderApp/OpenIDProviderApp.csproj" />
+  <Project Path="OpenIDProviderApp.MinimalApi/OpenIDProviderApp.MinimalApi.csproj" />
   <Project Path="TestClientApp/TestClientApp.csproj" />
 </Solution>

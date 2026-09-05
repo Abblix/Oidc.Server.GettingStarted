@@ -23,8 +23,6 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["LoginRequest"];
-                    "text/json": components["schemas"]["LoginRequest"];
-                    "application/*+json": components["schemas"]["LoginRequest"];
                 };
             };
             responses: {
@@ -34,9 +32,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["AuthSuccessResponse"];
                         "application/json": components["schemas"]["AuthSuccessResponse"];
-                        "text/json": components["schemas"]["AuthSuccessResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -45,9 +41,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ValidationProblemDetails"];
-                        "application/json": components["schemas"]["ValidationProblemDetails"];
-                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                        "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
                     };
                 };
             };
@@ -77,8 +71,6 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["RegisterRequest"];
-                    "text/json": components["schemas"]["RegisterRequest"];
-                    "application/*+json": components["schemas"]["RegisterRequest"];
                 };
             };
             responses: {
@@ -88,9 +80,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["AuthSuccessResponse"];
                         "application/json": components["schemas"]["AuthSuccessResponse"];
-                        "text/json": components["schemas"]["AuthSuccessResponse"];
                     };
                 };
                 /** @description Bad Request */
@@ -99,9 +89,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ValidationProblemDetails"];
-                        "application/json": components["schemas"]["ValidationProblemDetails"];
-                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                        "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
                     };
                 };
             };
@@ -119,6 +107,17 @@ export interface components {
         AuthSuccessResponse: {
             redirectUrl: string;
         };
+        HttpValidationProblemDetails: {
+            type?: null | string;
+            title?: null | string;
+            /** Format: int32 */
+            status?: null | number | string;
+            detail?: null | string;
+            instance?: null | string;
+            errors?: {
+                [key: string]: string[];
+            };
+        };
         LoginRequest: {
             email: string;
             password: string;
@@ -130,17 +129,6 @@ export interface components {
             password: string;
             confirmPassword: string;
             requestUri?: null | string;
-        };
-        ValidationProblemDetails: {
-            type?: null | string;
-            title?: null | string;
-            /** Format: int32 */
-            status?: null | number | string;
-            detail?: null | string;
-            instance?: null | string;
-            errors?: {
-                [key: string]: string[];
-            };
         };
     };
     responses: never;

@@ -6,28 +6,18 @@
   },
   "servers": [
     {
-      "url": "https://localhost:5001/"
+      "url": "http://localhost:5080/"
     }
   ],
   "paths": {
     "/api/auth/login": {
       "post": {
         "tags": [
-          "AuthApi"
+          "Program"
         ],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            },
-            "application/*+json": {
               "schema": {
                 "$ref": "#/components/schemas/LoginRequest"
               }
@@ -39,17 +29,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthSuccessResponse"
-                }
-              },
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthSuccessResponse"
-                }
-              },
-              "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AuthSuccessResponse"
                 }
@@ -59,19 +39,9 @@
           "400": {
             "description": "Bad Request",
             "content": {
-              "text/plain": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
                 }
               }
             }
@@ -82,21 +52,11 @@
     "/api/auth/register": {
       "post": {
         "tags": [
-          "AuthApi"
+          "Program"
         ],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
-              }
-            },
-            "application/*+json": {
               "schema": {
                 "$ref": "#/components/schemas/RegisterRequest"
               }
@@ -108,17 +68,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthSuccessResponse"
-                }
-              },
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthSuccessResponse"
-                }
-              },
-              "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AuthSuccessResponse"
                 }
@@ -128,19 +78,9 @@
           "400": {
             "description": "Bad Request",
             "content": {
-              "text/plain": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
                 }
               }
             }
@@ -159,6 +99,53 @@
         "properties": {
           "redirectUrl": {
             "type": "string"
+          }
+        }
+      },
+      "HttpValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -211,59 +198,12 @@
             ]
           }
         }
-      },
-      "ValidationProblemDetails": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "title": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "status": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "instance": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "errors": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        }
       }
     }
   },
   "tags": [
     {
-      "name": "AuthApi"
+      "name": "Program"
     }
   ]
 }
