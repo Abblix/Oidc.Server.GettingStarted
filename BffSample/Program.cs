@@ -15,6 +15,9 @@ const string ResourceKey = "OpenIdConnect:Resource";
 // RFC 8707 section 2. Microsoft's OpenID Connect handler has no property for it.
 const string ResourceParameter = "resource";
 
+var destinationPrefix = configuration.GetValue<string>(ResourceKey)
+                        ?? throw new InvalidOperationException($"The value {ResourceKey} must be set");
+
 builder.Services
     .AddAuthorization()
     .AddAuthentication(options => configuration.Bind("Authentication", options))
@@ -32,10 +35,7 @@ builder.Services
         // so it is set on the outgoing message.
         options.Events.OnRedirectToIdentityProvider = context =>
         {
-            var resource = configuration[ResourceKey];
-            if (!string.IsNullOrEmpty(resource))
-                context.ProtocolMessage.SetParameter(ResourceParameter, resource);
-
+            context.ProtocolMessage.SetParameter(ResourceParameter, destinationPrefix);
             return Task.CompletedTask;
         };
     });
@@ -76,8 +76,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-var destinationPrefix = configuration.GetValue<string>(ResourceKey)
-                        ?? throw new InvalidOperationException($"The value {ResourceKey} must be set");
 
 app.MapForwarder(
     "/bff/{**catch-all}",
