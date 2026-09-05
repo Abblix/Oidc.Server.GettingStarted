@@ -1,6 +1,6 @@
 using Abblix.DependencyInjection;
-using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Jwt;
+using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.Mvc;
 using OpenIDProviderApp;
