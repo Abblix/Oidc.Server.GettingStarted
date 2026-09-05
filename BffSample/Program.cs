@@ -76,7 +76,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-
 app.MapForwarder(
     "/bff/{**catch-all}",
     destinationPrefix,
