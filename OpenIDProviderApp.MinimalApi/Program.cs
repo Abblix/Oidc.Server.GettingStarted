@@ -20,8 +20,9 @@ var userStore = new TestUserStore(
 builder.Services.AddSingleton(userStore);
 builder.Services.AddSingleton<IUserInfoProvider>(userStore);
 
-// AddOidcMinimalApi = AddOidcCore + the Minimal API transport adapter
-builder.Services.AddOidcMinimalApi(options =>
+// AddOidcServices = the protocol core plus the Minimal API transport adapter, the counterpart
+// of the MVC integration's own AddOidcServices.
+builder.Services.AddOidcServices(options =>
 {
     // Client registrations are loaded from the Oidc section of appsettings.json
     builder.Configuration.Bind("Oidc", options);
