@@ -9,7 +9,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientRoot)node_modules\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
-	<PackageReference Include="Abblix.Oidc.Server.Mvc" Version="2.3.0" />
+	<PackageReference Include="Abblix.Oidc.Server.Mvc" Version="2.4.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- Keep the npm project visible in the IDE but out of the .NET item graph. -->
