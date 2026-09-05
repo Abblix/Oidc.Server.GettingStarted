@@ -68,10 +68,10 @@ builder.Services.AddOpenApi(options =>
     // library's OIDC protocol endpoints stay out of the generated schema and it stays small.
     options.ShouldInclude = description => description.RelativePath?.StartsWith("api/auth") ?? false);
 
-// Register and configure Abblix OIDC Server through the Minimal API adapter. AddOidcMinimalApi is the
-// Minimal API counterpart of the MVC AddOidcServices: same framework-neutral core, different transport.
-// The endpoints are mapped later with app.MapOidcEndpoints().
-builder.Services.AddOidcMinimalApi(options =>
+// Register and configure Abblix OIDC Server through the Minimal API adapter: the same framework-neutral
+// core the MVC integration registers, with a different transport. The endpoints are mapped later with
+// app.MapOidcEndpoints().
+builder.Services.AddOidcServices(options =>
 {
     options.Issuer = "https://localhost:5001";
     options.Resources =

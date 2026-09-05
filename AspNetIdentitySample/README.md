@@ -22,8 +22,6 @@ From the `Oidc.Server.GettingStarted` root:
 
 On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the `test_client`. Delete the `.db` files to start from an empty store. Node.js is required: the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.
 
-Until Abblix OIDC Server 2.4 is published to nuget.org, this sample references a 2.4 dev build of `Abblix.Oidc.Server.MinimalApi` from the Abblix GitHub Packages feed (see `NuGet.config`); `dotnet restore` pulls it automatically.
-
 ## Layout
 
 - `Program.cs`: Identity + EF wiring, `AddOidcMinimalApi` with `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter.
