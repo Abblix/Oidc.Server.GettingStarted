@@ -1,5 +1,6 @@
 using System.Net;
 using Abblix.Jwt;
+using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Features.RandomGenerators;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
@@ -29,6 +30,13 @@ builder.Services.AddOidcServices(options =>
 
     options.Issuer = "https://localhost:5006";
     options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);
+
+    // The same resource the MVC provider declares, so a client registered against both - BffSample
+    // asks for the weather scope - is served identically whichever one it points at.
+    options.Resources =
+    [
+        new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
+    ];
 
     // The following line generates a new key for token signing. Replace it if you want to use your own keys.
     options.SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)];
