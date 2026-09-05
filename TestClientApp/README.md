@@ -17,7 +17,7 @@ TestClientApp needs a provider running next to it. From the `Oidc.Server.Getting
 - `dotnet run --project OpenIDProviderApp` (or `AspNetIdentitySample`) starts the provider on `https://localhost:5001`.
 - `dotnet run --project TestClientApp` starts the client on `https://localhost:5002`.
 
-Open `https://localhost:5002` and use the sign-in link. With OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, register a new account first. Node.js is required: the client bundles Bootstrap with Vite.
+Open `https://localhost:5002`: the home page requires authentication, so it sends you to the provider to sign in. With OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, register a new account first. Node.js is required: the client bundles Bootstrap with Vite.
 
 ## Layout
 
