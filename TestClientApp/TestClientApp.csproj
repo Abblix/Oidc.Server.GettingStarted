@@ -4,10 +4,38 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Client-side vendor assets (Bootstrap) are bundled from ClientAssets into
+         wwwroot/lib by Vite; see the BuildClientAssets target below. -->
+    <ClientRoot>ClientAssets\</ClientRoot>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientRoot)node_modules\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Keep the npm project visible in the IDE but out of the .NET item graph. -->
+    <Content Remove="$(ClientRoot)**" />
+    <None Remove="$(ClientRoot)**" />
+    <None Include="$(ClientRoot)**" Exclude="$(ClientRoot)node_modules\**" />
+  </ItemGroup>
+
+  <!-- Restore npm packages when node_modules is missing (fresh clone / CI). -->
+  <Target Name="EnsureClientDeps" Condition="!Exists('$(ClientRoot)node_modules')">
+    <Exec Command="node --version" ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="NodeExitCode" />
+    </Exec>
+    <Error Condition="'$(NodeExitCode)' != '0'" Text="Node.js is required to build this project. Install it from https://nodejs.org/ and restart your terminal or IDE." />
+    <Exec WorkingDirectory="$(ClientRoot)" Command="npm install" />
+  </Target>
+
+  <!-- Bundle Bootstrap into wwwroot/lib before every build. Incremental: skipped
+       when the outputs are newer than the sources. -->
+  <Target Name="BuildClientAssets" BeforeTargets="Build" DependsOnTargets="EnsureClientDeps"
+          Inputs="$(ClientRoot)package.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts"
+          Outputs="wwwroot\lib\bootstrap-bundle.js;wwwroot\lib\bootstrap-bundle.css">
+    <Exec WorkingDirectory="$(ClientRoot)" Command="npm run build" />
+  </Target>
 
 </Project>

@@ -1,0 +1,47 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" asp-append-version="true" />
+    <title>@AppDomain.CurrentDomain.FriendlyName</title>
+    <link rel="stylesheet" href="~/lib/bootstrap-bundle.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="h-100">
+    <div class="d-flex flex-column min-vh-100">
+        <header>
+            <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+                <div class="container-fluid">
+                    <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">AspNetIdentitySample</a>
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                            aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                        <ul class="navbar-nav flex-grow-1">
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" href="https://abblix.com/" target="_blank">Abblix</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">OIDC Server</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+        </header>
+        <main role="main" class="m-auto pb-3">
+            @RenderBody()
+        </main>
+        <footer class="border-top footer text-muted">
+            <div class="container">
+                &copy; 2026 - Powered by <a href="https://github.com/Abblix/Oidc.Server" target="_blank">Abblix OIDC Server</a>
+            </div>
+        </footer>
+    </div>
+
+    <script type="module" src="~/lib/bootstrap-bundle.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

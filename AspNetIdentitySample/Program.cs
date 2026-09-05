@@ -1,0 +1,213 @@
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Abblix.DependencyInjection;
+using Abblix.Jwt;
+using Abblix.Oidc.Server.Common.Constants;
+using Abblix.Oidc.Server.Common.Interfaces;
+using Abblix.Oidc.Server.Features.ClientInformation;
+using Abblix.Oidc.Server.Features.UserInfo;
+using Abblix.Oidc.Server.Mvc;
+using AspNetIdentitySample;
+using AspNetIdentitySample.OidcStore;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// ASP.NET Core Identity owns users and credentials: the standard Identity tables
+// live in this DbContext, and the core registration brings the user store,
+// password hashing, and lockout without Identity's own cookie schemes.
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("Users")));
+
+builder.Services
+    .AddIdentityCore<IdentityUser>(options =>
+    {
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.User.RequireUniqueEmail = true;
+    })
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddSignInManager();
+
+// Password-hashing work factor: Identity's default hasher here is PBKDF2-HMAC-SHA512. Bind
+// IterationCount from appsettings.json so it can be raised to meet current OWASP guidance for that
+// algorithm without a recompile.
+builder.Services.Configure<PasswordHasherOptions>(builder.Configuration.GetSection("PasswordHasher"));
+
+// The library ships no IUserInfoProvider: this registration is mandatory, not optional.
+builder.Services.AddScoped<IUserInfoProvider, IdentityUserInfoProvider>();
+
+// Add services to the container.
+builder.Services.AddControllersWithViews();
+
+// The React auth SPA posts JSON and echoes the antiforgery request token in this header; the
+// [ValidateAntiForgeryToken] endpoints validate it against the paired HttpOnly cookie.
+builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
+
+// Emit an OpenAPI document from the auth endpoints. It is the contract the React client generates its
+// TypeScript types from, so the two sides cannot silently drift. Served at /openapi/v1.json in
+// development; the client regenerates its types from it with `npm run gen:api` (see ClientApp), and
+// the generated schema is committed. Runtime emission is used deliberately over build-time emission,
+// which would run this app's startup (EnsureCreated + store seeding) as a build side effect.
+builder.Services.AddOpenApi(options =>
+    // Scope the document to the auth API. The client only generates types for its own contract, so the
+    // library's OIDC protocol endpoints stay out of the generated schema and it stays small.
+    options.ShouldInclude = description => description.RelativePath?.StartsWith("api/auth") ?? false);
+
+// Register and configure Abblix OIDC Server
+builder.Services.AddOidcServices(options =>
+{
+    options.Resources =
+    [
+        new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
+    ];
+    options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);
+
+    // SigningKeys and Clients are deliberately NOT set here. They come from the SQLite-backed
+    // providers registered below, so they outlive a restart. A first-party client could still be
+    // declared in options.Clients and would win on read (see LayeredClientInfoProvider).
+});
+
+// Durable OIDC state (signing keys and client registrations) lives in SQLite so a restart neither
+// invalidates issued tokens nor forgets registered clients. The providers below are singletons, so
+// they open a context per call through IDbContextFactory rather than holding a scoped DbContext.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddDbContextFactory<OidcStoreDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("OidcStore")));
+
+// Data Protection encrypts the signing key before it lands in SQLite, so a stolen database file
+// yields ciphertext, not a private key. The key ring is persisted to disk EXPLICITLY rather than
+// through the default, which lands in a per-user profile folder (why a local restart still decrypts)
+// but degrades to ephemeral in-memory keys inside a container with no user profile. SetApplicationName
+// fixes the key isolation so every instance derives the same keys.
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(
+        System.IO.Path.Combine(builder.Environment.ContentRootPath, "dataprotection-keys")))
+    .SetApplicationName("AspNetIdentitySample");
+#warning The Data Protection key ring above is a LOCAL, UNENCRYPTED folder: single-node and unprotected. For real deployments persist it to a store every instance shares and add ProtectKeysWith an X.509 certificate or a KMS, or a fresh pod cannot decrypt the stored signing key. See https://docs.abblix.com/docs/signing-key-persistence#encrypting-the-stored-key-at-rest
+
+// Signing keys: replace the ephemeral in-memory default (OidcOptionsKeysProvider, which would
+// generate a new key on every startup) with the database-backed provider. Registered after
+// AddOidcServices so the last singular registration wins.
+builder.Services.AddSingleton<IAuthServiceKeysProvider, DatabaseKeysProvider>();
+
+// Client store: decorate the read seam and replace the write seam, after AddOidcServices. The
+// library aliases its in-memory store to both client interfaces unconditionally, so a store
+// pre-registered before AddOidcServices would be silently overridden. Decorating and replacing
+// afterwards is the pattern that takes effect on this version.
+builder.Services.AddSingleton<DurableClientStore>();
+builder.Services.Decorate<IClientInfoProvider, LayeredClientInfoProvider>();
+builder.Services.RemoveAll<IClientInfoManager>();
+builder.Services.AddAlias<IClientInfoManager, DurableClientStore>();
+
+// The host-registered cookie carries the library's OIDC session: Identity never signs in, it only verifies.
+// The security stamp snapshotted at login is compared on every request, so a password change
+// or UpdateSecurityStampAsync ends existing sessions instead of letting them ride out the cookie lifetime.
+builder.Services
+    .AddAuthentication()
+    .AddCookie(options =>
+    {
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var userManager = context.HttpContext.RequestServices
+                .GetRequiredService<UserManager<IdentityUser>>();
+            var subject = context.Principal?.FindFirstValue("sub");
+            var user = subject is null ? null : await userManager.FindByIdAsync(subject);
+            var snapshot = context.Principal?.FindFirstValue("security_stamp");
+
+            if (user is null || await userManager.GetSecurityStampAsync(user) != snapshot)
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(context.Scheme.Name);
+            }
+        };
+    });
+
+builder.Services
+    .AddDistributedMemoryCache();
+
+var app = builder.Build();
+
+// Create the Identity schema so the signup form has tables to write to. Nothing is seeded here:
+// users register themselves through /Auth/Register (see AuthController), so the very first thing a
+// fresh run asks for is a sign-up. A real deployment replaces EnsureCreated with EF migrations.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.EnsureCreatedAsync();
+
+    // Seed the OIDC store so the sample runs out of the box: a signing key that survives restarts,
+    // and the test client. On the next run both already exist, so the same key keeps validating
+    // tokens issued before the restart. A real deployment replaces EnsureCreated with EF migrations,
+    // and keeps signing keys in an HSM or KMS rather than the database (see the #warning on PersistedSigningKey).
+    var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
+
+    var oidcStoreFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<OidcStoreDbContext>>();
+    await using (var oidcStore = await oidcStoreFactory.CreateDbContextAsync())
+    {
+        await oidcStore.Database.EnsureCreatedAsync();
+
+        if (!await oidcStore.SigningKeys.AnyAsync(key => key.IsActive && key.Usage == PublicKeyUsages.Signature))
+        {
+            var keyProtector = scope.ServiceProvider
+                .GetRequiredService<IDataProtectionProvider>()
+                .CreateProtector(DatabaseKeysProvider.SigningKeyProtectorPurpose);
+
+            var signingKey = JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature);
+            oidcStore.SigningKeys.Add(new PersistedSigningKey
+            {
+                KeyId = signingKey.KeyId!,
+                Usage = PublicKeyUsages.Signature,
+                JwkJson = keyProtector.Protect(JsonSerializer.Serialize<JsonWebKey>(signingKey)),
+                CreatedAt = clock.GetUtcNow(),
+            });
+            await oidcStore.SaveChangesAsync();
+        }
+    }
+
+    var clients = scope.ServiceProvider.GetRequiredService<DurableClientStore>();
+    if (await clients.TryFindClientAsync("test_client") is null)
+    {
+        await clients.AddClientAsync(new ClientInfo("test_client")
+        {
+            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
+            TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
+            AllowedGrantTypes = [GrantTypes.AuthorizationCode],
+            PkceRequired = true,
+            RedirectUris = [new Uri("https://localhost:5002/signin-oidc", UriKind.Absolute)],
+            PostLogoutRedirectUris = [new Uri("https://localhost:5002/signout-callback-oidc", UriKind.Absolute)],
+        });
+    }
+}
+
+// Configure the HTTP request pipeline.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Home/Error");
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+
+app.UseRouting();
+app.UseCors();
+app.UseAuthorization();
+
+// Attribute-routed controllers: the JSON auth API (/api/auth/*) and the SPA host routes (/Auth/*).
+app.MapControllers();
+
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
+
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.Run();

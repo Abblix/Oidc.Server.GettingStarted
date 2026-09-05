@@ -1,72 +1,77 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --fg: #1a1d23;
+  --muted: #626a75;
+  --border: #e3e6ea;
+  --accent: #1b6ec2;
+  --accent-fg: #ffffff;
+  --danger: #c0392b;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .06), 0 1px 2px rgba(0, 0, 0, .04);
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --surface: #1e2127;
+    --fg: #e6e8eb;
+    --muted: #9aa1ac;
+    --border: #2c313a;
+    --accent: #4a9eff;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  }
 }
-a:hover {
-  color: #535bf2;
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
   min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
 }
 
-div {
-  text-align: left;
+h1,
+h2 {
+  line-height: 1.2;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  font: inherit;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: .5rem 1rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  transition: filter .15s;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+button:hover {
+  filter: brightness(1.07);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

@@ -26,9 +26,9 @@ export const WeatherForecast: React.FC = () => {
 
 
     const contents = loading
-        ? <p><em>Loading...</em></p>
+        ? <p className="status">Loading...</p>
         : (
-            <table className="table table-striped" aria-labelledby="tableLabel">
+            <table className="table" aria-labelledby="tableLabel">
                 <thead>
                 <tr>
                     <th>Date</th>
@@ -41,8 +41,8 @@ export const WeatherForecast: React.FC = () => {
                 {forecasts.map((forecast, index) => (
                     <tr key={index}>
                         <td>{forecast.date}</td>
-                        <td align="center">{forecast.temperatureC}</td>
-                        <td align="center">{forecast.temperatureF}</td>
+                        <td>{forecast.temperatureC}</td>
+                        <td>{forecast.temperatureF}</td>
                         <td>{forecast.summary}</td>
                     </tr>
                 ))}
@@ -53,7 +53,7 @@ export const WeatherForecast: React.FC = () => {
     return (
         <div>
             <h2 id="tableLabel">Weather forecast</h2>
-            <p>This component demonstrates fetching data from the server.</p>
+            <p className="hint">Fetched from a protected API; the BFF attaches the access token server-side.</p>
             {contents}
         </div>
     );
