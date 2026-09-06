@@ -23,9 +23,10 @@ public sealed class SessionStore(ILogger<SessionStore> logger) : ISecurityEventS
         ValidatedSecurityEventToken token,
         CancellationToken cancellationToken = default)
     {
-        // A transmitter may name a session, or only the user - and then every session that user has here
-        // is what is being talked about. The sample keeps that distinction rather than flattening both
-        // into one identifier.
+        // A transmitter may name a session, or only the user - and then every session that user has here is
+        // what is being talked about. This sample handles only the first case: an event naming the user
+        // alone falls through below and nothing is closed. A real receiver answers it by revoking every
+        // session it holds for that user, which is why the two are worth telling apart at all.
         var session = (token.Token.GetSubjectId() as ComplexSubject)?.Session as OpaqueSubject;
 
         if (token.EventPayloads?.ContainsKey(CaepEventTypes.SessionRevoked) == true && session is not null)

@@ -9,8 +9,13 @@ using Abblix.SharedSignals.Transmitter;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var issuer = builder.Configuration["Issuer"] ?? "https://localhost:5101";
-var receiver = builder.Configuration["Receiver"] ?? "https://localhost:5102";
+// Read as required rather than defaulted: a settings file that lost the key would otherwise produce an
+// app that runs on a hardcoded address and disagrees with the stream declared below.
+var issuer = builder.Configuration["Issuer"]
+    ?? throw new InvalidOperationException("Configuration key 'Issuer' is missing.");
+
+var streams = builder.Configuration.GetSection("SharedSignals:Streams").Get<IReadOnlyList<ConfiguredStream>>()
+    ?? throw new InvalidOperationException("Configuration section 'SharedSignals:Streams' is missing.");
 
 // A real transmitter takes its signing key from the same place the rest of the deployment does - a key
 // vault, a certificate store. This sample mints one per run, so restarting it is a key rollover as the
@@ -20,6 +25,9 @@ var receiver = builder.Configuration["Receiver"] ?? "https://localhost:5102";
 // refetches the JWK Set only when a token names one it does not hold, so a new key wearing the previous
 // name is never fetched: the receiver keeps verifying against the key it already has and answers every
 // delivery "400". Restart this app with the id hardcoded and that is exactly what happens.
+//
+// 2048 bits is the floor RS256 is deployed at; a host with its own key size policy sets that instead of
+// inheriting this number from a sample.
 using var rsa = RSA.Create(2048);
 var signingKey = new RsaJsonWebKey
     {
@@ -44,19 +52,16 @@ builder.Services.AddSharedSignalsTransmitter(new SharedSignalsTransmitterOptions
     // A receiver names its own delivery endpoint, so by default the transmitter refuses to POST to an
     // address inside its own network: otherwise a stream pointed at a metadata service turns the
     // transmitter into the attacker's HTTP client. Both sides of this sample run on one machine, which is
-    // exactly the case that refusal covers, so the operator names the destination explicitly.
-    AllowedReceiverAddresses = [new Uri(receiver)],
-
-    // A receiver conforming to the CAEP Interoperability Profile adds no subjects and expects the stream
-    // to cover all of them. Left at None, this sample would deliver nothing and say nothing.
-    DefaultSubjectsMode = StreamSubjectsMode.All,
+    // exactly the case that refusal covers, so the operator permits those destinations explicitly.
+    //
+    // Derived from the declared streams rather than configured separately, so the address this transmitter
+    // permits and the address it pushes to cannot be edited apart.
+    AllowedReceiverAddresses = [.. streams.Select(stream => stream.PushEndpointUrl).OfType<Uri>()],
 });
 
 // The receivers of this deployment are known in advance, so they are declared rather than created through
-// the management API. The file owns what the stream IS; whatever the receiver later does to it through the
-// API - pausing it, adding subjects - is kept by the store.
-builder.Services.AddSharedSignalsConfiguredStreams(
-    builder.Configuration.GetSection("SharedSignals:Streams").Get<IReadOnlyList<ConfiguredStream>>() ?? []);
+// the management API.
+builder.Services.AddSharedSignalsConfiguredStreams(streams);
 
 var app = builder.Build();
 

@@ -8,13 +8,24 @@ using ReceiverApp;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var transmitter = builder.Configuration["Transmitter"] ?? "https://localhost:5101";
-var self = builder.Configuration["Audience"] ?? "https://localhost:5102";
+// Read as required rather than defaulted: a receiver that silently falls back to a hardcoded transmitter
+// is a receiver trusting an issuer nobody configured.
+var transmitter = builder.Configuration["Transmitter"]
+    ?? throw new InvalidOperationException("Configuration key 'Transmitter' is missing.");
+
+var self = builder.Configuration["Audience"]
+    ?? throw new InvalidOperationException("Configuration key 'Audience' is missing.");
 
 builder.Services.AddSecurityEvents(options => options.Events.RegisterCaepEvents());
 
 // The receiver's actual trust root. Keys come from the transmitter's published JWK Set and are cached; a
-// token naming a kid the cache lacks forces one refetch, which is how a key rotation is noticed.
+// token naming a kid the cache lacks forces one refetch, which is how a key rotation is noticed before the
+// cache expires.
+//
+// That refetch has a floor under it - JwksKeyResolutionOptions.RolloverRefetchCooldown, 30 seconds by
+// default - so a bogus kid cannot be used to hammer the issuer. A token arriving inside that window is
+// refused against the stale key set, and a refused push is dropped rather than retried, so an event
+// delivered in the first seconds after a rotation is lost.
 builder.Services.AddJwksKeyResolution(options =>
     options.JwksUris[transmitter] = new Uri($"{transmitter}/.well-known/jwks.json"));
 
