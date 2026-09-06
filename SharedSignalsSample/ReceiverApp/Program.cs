@@ -21,13 +21,24 @@ builder.Services.AddSecurityEvents(options => options.Events.RegisterCaepEvents(
 // The receiver's actual trust root. Keys come from the transmitter's published JWK Set and are cached; a
 // token naming a kid the cache lacks forces one refetch, which is how a key rotation is noticed before the
 // cache expires.
-//
-// That refetch has a floor under it - JwksKeyResolutionOptions.RolloverRefetchCooldown, 30 seconds by
-// default - so a bogus kid cannot be used to hammer the issuer. A token arriving inside that window is
-// refused against the stale key set, and a refused push is dropped rather than retried, so an event
-// delivered in the first seconds after a rotation is lost.
 builder.Services.AddJwksKeyResolution(options =>
-    options.JwksUris[transmitter] = new Uri($"{transmitter}/.well-known/jwks.json"));
+{
+    options.JwksUris[transmitter] = new Uri($"{transmitter}/.well-known/jwks.json");
+
+    // DO NOT COPY THIS LINE INTO A DEPLOYMENT. The default floor of 30 seconds is a rate limit, and the
+    // thing it limits is not this sample: the push endpoint accepts a token before any signature is
+    // verified, so anyone who can reach it can send a stream of tokens naming key ids nobody ever
+    // published, and without the floor each one becomes a fetch against the transmitter. The receiver
+    // then works as an amplifier aimed at the party it trusts most.
+    //
+    // Zero here because the sample restarts its transmitter on purpose to show a rollover, and the point
+    // of that exercise is drowned by waiting out a rate limit written for hostile traffic that a
+    // one-reader sample does not have. The cost is real and paid in a deployment rather than here: within
+    // the floor a token signed by the new key is judged against the old key set and refused, and a
+    // refused push is acknowledged out of the transmitter's queue rather than retried, so events
+    // dispatched in that window are lost.
+    options.RolloverRefetchCooldown = TimeSpan.Zero;
+});
 
 // Duplicate suppression is a second line, not the first: RFC 8935 lets a transmitter redeliver whatever
 // the earlier response was, so the sink must be idempotent regardless of this cache.
