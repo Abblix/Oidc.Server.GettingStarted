@@ -9,13 +9,19 @@ using Abblix.SharedSignals.Transmitter;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Read as required rather than defaulted: a settings file that lost the key would otherwise produce an
-// app that runs on a hardcoded address and disagrees with the stream declared below.
-var issuer = builder.Configuration["Issuer"]
-    ?? throw new InvalidOperationException("Configuration key 'Issuer' is missing.");
+const string IssuerKey = "Issuer";
+const string StreamsSection = "SharedSignals:Streams";
 
-var streams = builder.Configuration.GetSection("SharedSignals:Streams").Get<IReadOnlyList<ConfiguredStream>>()
-    ?? throw new InvalidOperationException("Configuration section 'SharedSignals:Streams' is missing.");
+// The issuer is the identity this transmitter claims in every token it signs, and the receiver matches it
+// against its own expected issuers. A settings file that lost the key would announce an identity nobody
+// configured, and the receiver would stop believing a transmitter that is otherwise working.
+var issuer = builder.Configuration[IssuerKey]
+    ?? throw new InvalidOperationException($"Configuration key '{IssuerKey}' is missing.");
+
+// A transmitter whose stream declarations went missing starts cleanly, delivers nothing and logs nothing,
+// which is the emptiest kind of failure to diagnose.
+var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList<ConfiguredStream>>()
+    ?? throw new InvalidOperationException($"Configuration section '{StreamsSection}' is missing.");
 
 // A real transmitter takes its signing key from the same place the rest of the deployment does - a key
 // vault, a certificate store. This sample mints one per run, so restarting it is a key rollover as the

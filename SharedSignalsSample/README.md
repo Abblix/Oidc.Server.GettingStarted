@@ -98,13 +98,13 @@ What comes back is the key's public description: its type, id, algorithm and int
 
 Read the `kid` from the JWK Set, restart `TransmitterApp`, and read it again. It changed, because the sample mints a key per run and mints the id with it. Revoke another session and it arrives: the receiver met a `kid` it did not hold, refetched the key set, and verified against the new key.
 
-Now fix `KeyId` to a constant and restart again. Every delivery gets a `400` from then on, and nothing in either log says "key". The receiver is caching by key id, and a new key wearing the old name is a key it is confident it already has, so it never refetches at all.
+Now fix `KeyId` to a constant and restart again. Every delivery gets a `400` from then on, and the transmitter's log names it `invalid_key`. That names the symptom, not the cause: it says the receiver could not verify the signature, which is equally what a corrupt token or a wrong algorithm looks like. The cause is that the receiver is caching by key id, so a new key wearing the old name is a key it is confident it already holds and never refetches.
 
 The lesson generalizes past this sample. A key id is not a label for the slot a key sits in; it is the name of that key, and it changes when the key does.
 
 ### One setting here is not production-shaped
 
-`ReceiverApp` sets `RolloverRefetchCooldown` to zero, and the comment beside it says not to copy the line. The default is 30 seconds, and it is a rate limit rather than a propagation delay: the push endpoint accepts a token before any signature is verified, so anyone able to reach it can send a stream of tokens naming key ids nobody published, and without the floor each one becomes a fetch against the transmitter. The receiver would then work as an amplifier aimed at the party it trusts most.
+`ReceiverApp` sets `RolloverRefetchCooldown` to zero, and the comment beside it says not to copy the line. The default is 30 seconds, and it is a rate limit rather than a propagation delay. The push endpoint carries no transport authentication here, and the issuer allowlist admits any token naming the transmitter, which is a public value. So anyone able to reach the endpoint can send a stream of such tokens naming key ids nobody ever published, and without the floor each one becomes a fetch against the transmitter. The receiver would then work as an amplifier aimed at the party it trusts most.
 
 The sample sets it to zero so the rollover above happens the moment you restart the transmitter, instead of being drowned by a limit written for hostile traffic that a single reader does not generate. The cost that removes is real and paid in a deployment: within the floor, a token signed by the new key is judged against the old key set and refused, and a refused push is acknowledged out of the transmitter's queue rather than retried, so events dispatched in that window are lost. Since the default floor is the same order as the delivery sweep, that window is easy to land in. A rotation is not free.
 

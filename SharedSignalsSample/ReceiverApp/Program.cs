@@ -8,13 +8,18 @@ using ReceiverApp;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Read as required rather than defaulted: a receiver that silently falls back to a hardcoded transmitter
-// is a receiver trusting an issuer nobody configured.
-var transmitter = builder.Configuration["Transmitter"]
-    ?? throw new InvalidOperationException("Configuration key 'Transmitter' is missing.");
+const string TransmitterKey = "Transmitter";
+const string AudienceKey = "Audience";
 
-var self = builder.Configuration["Audience"]
-    ?? throw new InvalidOperationException("Configuration key 'Audience' is missing.");
+// A receiver that falls back to a hardcoded transmitter trusts an issuer nobody configured, and fetches
+// its keys from there too.
+var transmitter = builder.Configuration[TransmitterKey]
+    ?? throw new InvalidOperationException($"Configuration key '{TransmitterKey}' is missing.");
+
+// The audience is what stops an event legitimately issued for somebody else from being replayed here, so
+// a wrong value silently widens what this receiver accepts.
+var self = builder.Configuration[AudienceKey]
+    ?? throw new InvalidOperationException($"Configuration key '{AudienceKey}' is missing.");
 
 builder.Services.AddSecurityEvents(options => options.Events.RegisterCaepEvents());
 
@@ -26,10 +31,11 @@ builder.Services.AddJwksKeyResolution(options =>
     options.JwksUris[transmitter] = new Uri($"{transmitter}/.well-known/jwks.json");
 
     // DO NOT COPY THIS LINE INTO A DEPLOYMENT. The default floor of 30 seconds is a rate limit, and the
-    // thing it limits is not this sample: the push endpoint accepts a token before any signature is
-    // verified, so anyone who can reach it can send a stream of tokens naming key ids nobody ever
-    // published, and without the floor each one becomes a fetch against the transmitter. The receiver
-    // then works as an amplifier aimed at the party it trusts most.
+    // traffic it limits is not this sample's: the push endpoint has no transport authentication, and the
+    // issuer allowlist admits any token naming the transmitter, which is a public value. So anyone who can
+    // reach the endpoint can send a stream of such tokens naming key ids nobody ever published, and
+    // without the floor each one becomes a fetch against the transmitter. The receiver then works as an
+    // amplifier aimed at the party it trusts most.
     //
     // Zero here because the sample restarts its transmitter on purpose to show a rollover, and the point
     // of that exercise is drowned by waiting out a rate limit written for hostile traffic that a
