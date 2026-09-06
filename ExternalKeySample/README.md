@@ -130,8 +130,11 @@ full trade-off is in [EXTERNAL_KEYS.md](https://github.com/Abblix/Oidc.Server/bl
 ## Switch to Azure Key Vault
 
 Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and create two RSA keys named
-`oidc-sign` and `oidc-enc` in it, and grant the identity you sign in as Key Vault Crypto User on them - every
-signature and unwrap is that identity calling the vault.
+`oidc-sign` and `oidc-enc` in it, and give the identity you sign in as the rights to use them - every signature
+and every unwrap is that identity calling the vault. On a vault with Azure RBAC that is the Key Vault Crypto User
+role. On a vault still using access policies it is the key permissions `get`, `list`, `sign` and `decrypt`.
+`decrypt` is the one that surprises: the unwrap goes through Key Vault's decrypt operation, so a policy granting
+`unwrapKey` and not `decrypt` signs tokens happily and then fails introspection with a 403.
 
 The package takes credentials two ways: a service principal named by `Azure:TenantId`, `Azure:ClientId` and
 `Azure:ClientSecret`, or, with those left unset, `DefaultAzureCredential` (Azure CLI sign-in, a managed identity,
@@ -143,8 +146,8 @@ software-protected RSA keys has no per-key monthly fee, so a demo stays within t
 satisfies the same `IKeyCustodian` seam as the Vault one, so the switch is driven purely by configuration. For
 `Process`, the ring lives in Blob Storage rather than Vault's KV engine, so there is a little more to set up:
 create an `oidc-kek` RSA key in the vault, set `Azure:Blob:ServiceUri` to a storage account's blob endpoint (the
-container is created on first use), and grant the running identity Key Vault Crypto User on the key plus Storage
-Blob Data Contributor on the container.
+container is created on first use), and give the running identity the same key rights as above on `oidc-kek` plus
+Storage Blob Data Contributor on the container.
 
 ## Settings
 
