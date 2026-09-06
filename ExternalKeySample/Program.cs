@@ -26,10 +26,10 @@ builder.Services.AddCors();
 
 // Every value the sample cannot invent carries no default here: a default in code for the client secret's hash
 // would be credential material in code, and a default for a name or a URL is a second copy of a line
-// appsettings.json already holds. The two members that ARE optional say so in their own type - the encryption
-// toggle and the algorithm minted keys use. The binder does not honour `required`, leaving an absent setting
-// null, so each value is passed through Required at the point it is USED rather than in a list up front: three
-// of them are read in one posture only, and a list would refuse a configuration that is complete for the other.
+// appsettings.json already holds. `required` says nothing about that: the binder ignores it, so which settings a
+// configuration must carry is decided here and not by the keyword. Each value passes through Required where it is
+// USED rather than in a list up front, because several are read in one posture only and a list would refuse a
+// configuration that is complete for the other. A member read in one posture only says so in its own summary.
 var provider = builder.Configuration.GetSection(ProviderOptions.SectionName).Get<ProviderOptions>()
     ?? throw new InvalidOperationException($"The '{ProviderOptions.SectionName}' section is not configured.");
 

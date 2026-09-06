@@ -5,9 +5,11 @@
 /// this demo issues tokens to, and the toggle that turns on access-token encryption to exercise the
 /// custodian's unwrap path. Keeping these in configuration means the sample is retargeted without touching code.
 /// No value the sample cannot invent carries a default, so configuration is the single place each is written and
-/// an omission stops the server rather than substituting something the reader never chose. Two members are
-/// genuinely optional and are the two without <c>required</c>: <see cref="EncryptAccessToken"/>, which is off
-/// unless asked for, and <see cref="EncryptionAlgorithm"/>, whose absence is what says no encryption key is minted.
+/// an omission stops the server rather than substituting something the reader never chose. <c>required</c> here
+/// is a compile-time constraint on object initializers and has no effect on binding, so it does not say which
+/// settings a configuration must carry. A member read only in one posture says so in its own summary; the rest
+/// are read whatever the posture. The members left unmarked are those whose ABSENCE carries a meaning of its own
+/// rather than being an omission.
 /// </summary>
 public sealed class ProviderOptions
 {
@@ -37,7 +39,8 @@ public sealed class ProviderOptions
 
     /// <summary>
     /// The custodian's name for the signing key. It lives here rather than in the Vault or Azure section because
-    /// it is not a property of the connection: the same name is used whichever custodian holds the key.
+    /// it is not a property of the connection: the same name is used whichever custodian holds the key. Read only
+    /// in the <see cref="UseKeysIn.Custodian"/> placement; where the server mints its own keys it names them itself.
     /// </summary>
     public required string SigningKeyName { get; set; }
 
