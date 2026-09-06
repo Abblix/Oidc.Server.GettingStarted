@@ -3,43 +3,16 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Client-side vendor assets (Bootstrap) are bundled from ClientAssets into
-         wwwroot/lib by Vite; see the BuildClientAssets target below. -->
-    <ClientRoot>ClientAssets\</ClientRoot>
     <ClientAppRoot>ClientApp\</ClientAppRoot>
-    <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientRoot)node_modules\**;$(ClientAppRoot)node_modules\**;$(ClientAppRoot)dist\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientAppRoot)node_modules\**;$(ClientAppRoot)dist\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
-	<PackageReference Include="Abblix.Oidc.Server.Mvc" Version="2.3.0" />
-	<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
-	<!-- Override the transitive Microsoft.OpenApi 2.0.0 pulled by the line above: 2.0.0 carries a known
-	     high-severity advisory (GHSA-v5pm-xwqc-g5wc), patched in 2.7.5. -->
-	<PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
-	<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
-	<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
-	<PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+	<PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="2.4.0" />
+	<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+	<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
+	<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+	<PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- Keep the npm project visible in the IDE but out of the .NET item graph. -->
-    <Content Remove="$(ClientRoot)**" />
-    <None Remove="$(ClientRoot)**" />
-    <None Include="$(ClientRoot)**" Exclude="$(ClientRoot)node_modules\**" />
-  </ItemGroup>
-  <!-- Restore npm packages when node_modules is missing (fresh clone / CI). -->
-  <Target Name="EnsureClientDeps" Condition="!Exists('$(ClientRoot)node_modules')">
-    <Exec Command="node --version" ContinueOnError="true">
-      <Output TaskParameter="ExitCode" PropertyName="NodeExitCode" />
-    </Exec>
-    <Error Condition="'$(NodeExitCode)' != '0'" Text="Node.js is required to build this project. Install it from https://nodejs.org/ and restart your terminal or IDE." />
-    <Exec WorkingDirectory="$(ClientRoot)" Command="npm install" />
-  </Target>
-  <!-- Bundle Bootstrap into wwwroot/lib before every build. Incremental: skipped
-       when the outputs are newer than the sources. -->
-  <Target Name="BuildClientAssets" BeforeTargets="Build" DependsOnTargets="EnsureClientDeps"
-          Inputs="$(ClientRoot)package.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts"
-          Outputs="wwwroot\lib\bootstrap-bundle.js;wwwroot\lib\bootstrap-bundle.css">
-    <Exec WorkingDirectory="$(ClientRoot)" Command="npm run build" />
-  </Target>
 
   <!-- The React auth SPA (SignIn/SignUp). Kept visible in the IDE but out of the .NET item graph. -->
   <ItemGroup>
@@ -48,6 +21,7 @@
     <None Include="$(ClientAppRoot)**" Exclude="$(ClientAppRoot)node_modules\**;$(ClientAppRoot)dist\**" />
     <ClientAppInputs Include="$(ClientAppRoot)src\**\*;$(ClientAppRoot)index.html;$(ClientAppRoot)package.json;$(ClientAppRoot)vite.config.ts" />
   </ItemGroup>
+  <!-- Restore npm packages when node_modules is missing (fresh clone / CI). -->
   <Target Name="EnsureClientAppDeps" Condition="!Exists('$(ClientAppRoot)node_modules')">
     <Exec Command="node --version" ContinueOnError="true">
       <Output TaskParameter="ExitCode" PropertyName="NodeAppExitCode" />

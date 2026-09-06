@@ -2,7 +2,10 @@ import React from 'react';
 import { useBff } from './Bff';
 
 export const UserClaims: React.FC = () => {
-    const { user } = useBff();
+    const { user, sessionError } = useBff();
+
+    if (sessionError)
+        return <p className="status">No session: {sessionError}</p>;
 
     if (!user)
         return <p className="status">Checking your session...</p>;

@@ -14,7 +14,7 @@
 
 repos:
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.10
+    rev: v1.7.12
     hooks:
       - id: actionlint
         files: ^\.github/workflows/.*\.(yml|yaml)$
@@ -25,6 +25,6 @@ repos:
         name: "Block inline untrusted-input interpolation in run: blocks"
         entry: python .github/scripts/lint-no-inline-secrets.py
         language: python
-        additional_dependencies: [pyyaml]
+        additional_dependencies: [pyyaml==6.0.3]
         files: ^\.github/(workflows/.*\.(yml|yaml)|scripts/lint-no-inline-secrets\.py)$
         pass_filenames: false

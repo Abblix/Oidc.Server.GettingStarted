@@ -5,7 +5,7 @@
 [![OS](https://img.shields.io/badge/OS-linux%2C%20windows%2C%20macOS-0078D4)](https://docs.abblix.com/docs/technical-requirements)
 [![CPU](https://img.shields.io/badge/CPU-x86%2C%20x64%2C%20ARM%2C%20ARM64-FF8C00)](https://docs.abblix.com/docs/technical-requirements)
 [![GitHub last commit](https://img.shields.io/github/last-commit/Abblix/Oidc.Server.GettingStarted)](#)
-[![license: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+[![license: MIT](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 
 
 ⭐ Star us on GitHub - it motivates us a lot!
@@ -34,19 +34,22 @@ Before diving into this solution, make sure to review either the [Getting Starte
 ### Included projects
 
 - **OpenIDProviderApp**  
-The `OpenIDProviderApp` serves as the OpenID Connect provider within this project. Its primary responsibilities include authenticating users, managing their sessions, and issuing tokens in accordance with the OpenID Connect protocol. Specifically, it validates client requests and provides access and refresh tokens that authorize user resource access, as well as ID tokens that verify user identity. The application employs the Abblix OIDC Server solution to function effectively as an OpenID Connect protocol server. Additionally, the app is designed to handle various OAuth 2.0 flows, ensuring secure and compliant user authentication and authorization processes in modern web applications.
+The `OpenIDProviderApp` serves as the OpenID Connect provider within this project. Its primary responsibilities include authenticating users, managing their sessions, and issuing tokens in accordance with the OpenID Connect protocol. Specifically, it validates client requests and provides access tokens that authorize user resource access, as well as ID tokens that verify user identity. The application employs the Abblix OIDC Server solution to function effectively as an OpenID Connect protocol server. Additionally, the app is designed to handle various OAuth 2.0 flows, ensuring secure and compliant user authentication and authorization processes in modern web applications.
 
 - **AspNetIdentitySample**  
 The `AspNetIdentitySample` is the `OpenIDProviderApp` taken one step toward production: it replaces the in-memory demo user list with a real ASP.NET Core Identity user store backed by Entity Framework Core and SQLite. It demonstrates the two seams where Abblix OIDC Server meets an external user system. First, an `IUserInfoProvider` adapter over Identity's `UserManager` turns a subject identifier into claims. Second, a login flow that keeps responsibilities cleanly split: Identity verifies the password through `CheckPasswordSignInAsync` (password hashing, failed-attempt counting, and lockout), while the library's `IAuthSessionService` issues the OpenID Connect session cookie. The result is a provider whose users, credentials, and profile data live in a database rather than in code, while the protocol handling stays entirely with the library. Its sign-in and sign-up screens are a React and Tailwind SPA that talks to a JSON auth API, with the client's types generated from the server's OpenAPI document, so the same UI works over an MVC or a Minimal API host unchanged.
 
+- **OpenIDProviderApp.MinimalApi**  
+The `OpenIDProviderApp.MinimalApi` (port 5006) is the Minimal API counterpart of the `OpenIDProviderApp`: the same Abblix OIDC Server protocol core hosted through the `Abblix.Oidc.Server.MinimalApi` adapter instead of MVC. It configures a signing key in code, reads its clients from the `Oidc` section of `appsettings.json` like the MVC provider does, and maps the OIDC endpoints with `MapOidcEndpoints()`, making it a compact reference for hosting the server without MVC. It carries the same three interactive clients and the same `weather` resource as the MVC provider, so the two publish the same capabilities and a client moves between them by changing `Authority`. The addresses in the two discovery documents differ, because the two listen on different ports, and a client that also calls ApiSample needs the API's pinned issuer moved as well. It adds a `client_credentials` client for headless checks, which the MVC provider does not carry. Its own README covers running it.
+
 - **TestClientApp**  
-The `TestClientApp` functions as the Relying Party, acting as a client that depends on the `OpenIDProviderApp` for user authentication. It demonstrates the interaction between a client application and an OpenID Connect provider, showing how users are authenticated, tokens are obtained, and protected resources are accessed. This scenario offers practical insight into integrating OpenID Connect authentication into client applications. The `TestClientApp` uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` to operate as an OpenID Connect client, making it a practical example of real-world authentication in .NET environments.
+The `TestClientApp` functions as the Relying Party, acting as a client that depends on the `OpenIDProviderApp` (or its Minimal API twin, `OpenIDProviderApp.MinimalApi`) for user authentication. It demonstrates the interaction between a client application and an OpenID Connect provider, showing how users are authenticated and tokens are obtained. This scenario offers practical insight into integrating OpenID Connect authentication into client applications. The `TestClientApp` uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` to operate as an OpenID Connect client, making it a practical example of real-world authentication in .NET environments.
 
 - **BffSample**  
 The `BffSample` implements the Backend-For-Frontend (BFF) architectural pattern for a React Single Page Application (built with Vite) served by a .NET backend. The backend is a confidential OpenID Connect client: it runs the authorization code flow with PKCE, keeps the resulting tokens in an encrypted, HttpOnly session cookie, and never exposes them to browser JavaScript. Requests from the SPA to protected APIs are proxied through the backend, which strips the session cookie and attaches the access token, so the browser holds a session reference rather than a bearer token. The sample follows the IETF `draft-ietf-oauth-browser-based-apps` BFF profile and pairs with `ApiSample` as the protected resource. It is the runnable counterpart to the [Securing a React SPA with the BFF Pattern](https://docs.abblix.com/docs/react-spa-bff-guide) guide.
 
 - **BlazorSample**  
-The `BlazorSample` is a Blazor Web App (interactive Server render mode) acting as an OpenID Connect client of the `OpenIDProviderApp`. It shows the pattern that keeps Blazor and OIDC working together: the pages are rendered by Blazor, but sign-in and sign-out run on plain HTTP endpoints rather than inside an interactive circuit, because writing the authentication cookie and issuing the OIDC redirect both need the HTTP response. The sample uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` with cookie sessions, the authorization code flow and PKCE.
+The `BlazorSample` is a Blazor Web App (interactive Server render mode) acting as an OpenID Connect client of the `OpenIDProviderApp` (or its Minimal API twin, `OpenIDProviderApp.MinimalApi`). It shows the pattern that keeps Blazor and OIDC working together: the pages are rendered by Blazor, but sign-in and sign-out run on plain HTTP endpoints rather than inside an interactive circuit, because writing the authentication cookie and issuing the OIDC redirect both need the HTTP response. The sample uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` with cookie sessions, the authorization code flow and PKCE.
 
 - **ApiSample**  
 The `ApiSample` demonstrates how to build a secure backend API that works in conjunction with an OpenID Connect provider to authenticate and authorize client requests. This sample illustrates the integration of security protocols like OAuth 2.0 and OpenID Connect into API development, ensuring that only authenticated and authorized users can access protected resources. The `ApiSample` serves as a practical guide for implementing secure APIs that comply with modern authentication standards, providing a robust foundation for securing backend services in a distributed web application architecture.
@@ -94,7 +97,9 @@ After this, `git commit` automatically runs `actionlint` and a custom secrets-in
 
 ## 📃 License
 
-This project is licensed under the Creative Commons Attribution 4.0 International License. You can review the full license text at the following link: [CC BY 4.0 License](https://creativecommons.org/licenses/by/4.0/).
+The sample code in this repository is licensed under the MIT License - see [LICENSE](LICENSE). Copy it into your own project, change it, ship it. The boundary between this code and the product it demonstrates is spelled out in [NOTICE](NOTICE).
+
+Abblix OIDC Server itself is a separate product under its own licence, consumed here as a NuGet package and not redistributed in source form. Its terms are at [abblix.com/license](https://www.abblix.com/license).
 
 ## 🔗 Key Contacts & Resources
 
