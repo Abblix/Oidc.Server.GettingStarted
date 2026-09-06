@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TransmitterApp": {
+      "commandName": "Project",
+      "applicationUrl": "https://localhost:5101"
+    }
+  }
+}

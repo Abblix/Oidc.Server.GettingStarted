@@ -5,5 +5,7 @@
   <Project Path="BlazorSample/BlazorSample.csproj" />
   <Project Path="OpenIDProviderApp/OpenIDProviderApp.csproj" />
   <Project Path="OpenIDProviderApp.MinimalApi/OpenIDProviderApp.MinimalApi.csproj" />
+  <Project Path="SharedSignalsSample/ReceiverApp/ReceiverApp.csproj" />
+  <Project Path="SharedSignalsSample/TransmitterApp/TransmitterApp.csproj" />
   <Project Path="TestClientApp/TestClientApp.csproj" />
 </Solution>
