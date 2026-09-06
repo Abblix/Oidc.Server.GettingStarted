@@ -1,0 +1,46 @@
+# Brings up the Vault / OpenBao Transit custodian the sample signs and decrypts against, and provisions the RSA
+# keys it expects: oidc-sign and oidc-enc for the custodian-held posture, oidc-kek for the one that mints keys in
+# the process. Run `docker compose up -d`, then start the provider with `dotnet run` on the host.
+#
+# This is a DEV setup: the server runs unsealed in memory with a fixed root token, so its keys are lost on
+# restart. A real deployment runs Vault / OpenBao with a persistent storage backend, a real seal, and short
+# lived tokens issued through AppRole or Kubernetes auth - never a static root token.
+services:
+  openbao:
+    image: openbao/openbao:2.6.0
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    environment:
+      BAO_ADDR: http://127.0.0.1:8200
+    command: server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200
+    healthcheck:
+      test: ["CMD", "bao", "status"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # One-shot: enable the Transit engine and create the keys both tiers use as non-exportable RSA keys, then exit.
+  # The Custodian tier signs and unwraps with oidc-sign / oidc-enc; the Process tier seals its minted keys to
+  # oidc-kek and keeps the sealed ring in the KV v2 engine that dev mode already mounts at secret/. The names
+  # match Provider:SigningKeyName / EncryptionKeyName / KeyEncryptionKeyName in appsettings.json. Provisioning all
+  # three keeps one compose file behind both tiers; each tier ignores the keys it does not use.
+  provision:
+    image: openbao/openbao:2.6.0
+    depends_on:
+      openbao:
+        condition: service_healthy
+    environment:
+      BAO_ADDR: http://openbao:8200
+      BAO_TOKEN: root
+    restart: "no"
+    entrypoint:
+      - sh
+      - -c
+      - |
+        bao secrets enable transit 2>/dev/null || true
+        bao write transit/keys/oidc-sign type=rsa-2048
+        bao write transit/keys/oidc-enc type=rsa-2048
+        bao write transit/keys/oidc-kek type=rsa-2048
+        echo "Transit keys are ready: oidc-sign, oidc-enc, oidc-kek."

@@ -1,0 +1,27 @@
+# HTTP requests for the External Key Custodian sample.
+#
+# Open this file in Visual Studio 2022, JetBrains Rider / IntelliJ (HTTP Client), or VS Code (REST Client
+# extension), and click Send / Run above each request. Trust the dev HTTPS certificate once so the client
+# accepts it:
+#     dotnet dev-certs https --trust
+
+@host = https://localhost:5001
+
+# After running the token request below, paste its access_token here to run the introspection request.
+@accessToken = paste-the-access_token-here
+
+### Fetch an access token (OAuth 2.0 client_credentials). It is signed inside the custodian.
+POST {{host}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=demo-service&client_secret=secret&scope=api
+
+### The published keys: public-only (kty, n, e), never any private material.
+GET {{host}}/.well-known/jwks
+
+### Introspect the token. With Provider:EncryptAccessToken on, this makes the server unwrap the
+### Content Encryption Key through the custodian before it can validate the token.
+POST {{host}}/connect/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token={{accessToken}}&client_id=demo-service&client_secret=secret
