@@ -1,5 +1,6 @@
-# Brings up the Vault / OpenBao Transit custodian the sample signs and decrypts against, and provisions the two
-# RSA keys it expects. Run `docker compose up -d`, then start the provider with `dotnet run` on the host.
+# Brings up the Vault / OpenBao Transit custodian the sample signs and decrypts against, and provisions the RSA
+# keys it expects: oidc-sign and oidc-enc for the custodian-held posture, oidc-kek for the one that mints keys in
+# the process. Run `docker compose up -d`, then start the provider with `dotnet run` on the host.
 #
 # This is a DEV setup: the server runs unsealed in memory with a fixed root token, so its keys are lost on
 # restart. A real deployment runs Vault / OpenBao with a persistent storage backend, a real seal, and short

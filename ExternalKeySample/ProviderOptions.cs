@@ -24,8 +24,13 @@ public sealed class ProviderOptions
     /// <summary>The client_credentials client identifier.</summary>
     public string ClientId { get; set; } = "demo-service";
 
-    /// <summary>The secret the demo client authenticates with. It is hashed before it reaches the client store.</summary>
-    public string ClientSecret { get; set; } = "secret";
+    /// <summary>
+    /// The SHA-512 hash of the demo client's secret, base64-encoded, which is what configuration carries: the
+    /// recoverable secret is never written to a file a provider ships. The demo secret is <c>secret</c>, and the
+    /// README's request examples use it.
+    /// </summary>
+    public string ClientSecretSha512Hash { get; set; } =
+        "vSsar3708Jvp9Szi2NWZZ02Bqp1qRCFpbcTZPdBhnWgs5WtNZKnvCXdhztmeD2cmW192CF5bDufKRpayrW/isg==";
 
     /// <summary>
     /// The custodian's name for the signing key. It lives here rather than in the Vault or Azure section because

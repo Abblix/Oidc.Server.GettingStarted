@@ -1,6 +1,4 @@
-﻿using System.Security.Cryptography;
-using System.Text;
-using Abblix.Oidc.Server.Common.Constants;
+﻿using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Features;
 using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Jwt.ExternalKeys;
@@ -44,7 +42,7 @@ builder.Services.AddOidcServices(options =>
     [
         new ClientInfo(provider.ClientId)
         {
-            ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes(provider.ClientSecret)) }],
+            ClientSecrets = [new ClientSecret { Sha512Hash = Convert.FromBase64String(provider.ClientSecretSha512Hash) }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
             AllowedGrantTypes = [GrantTypes.ClientCredentials],
             AllowedScopes = [provider.Scope],
@@ -61,9 +59,12 @@ builder.Services.AddIntrospection();
 // KeyCustodian setting names it, and each member's name is also its configuration section, so the section name is
 // never repeated here. Only the call itself differs, since each package has its own options type. This MUST run
 // after AddOidcServices, because the placement call below composes the external crypto backends with the in-process
-// ones the OIDC registration puts in place.
-var custodian = builder.Configuration.GetValue<KeyCustodian>("KeyCustodian");
-var placement = builder.Configuration.GetValue<UseKeysIn>("UseKeysIn");
+// ones the OIDC registration puts in place. Both settings are read as nullable and refused when absent: bound to
+// the enum directly, a missing one takes the first member, picking a security posture by declaration order.
+var custodian = builder.Configuration.GetValue<KeyCustodian?>("KeyCustodian")
+    ?? throw new InvalidOperationException("KeyCustodian is not configured.");
+var placement = builder.Configuration.GetValue<UseKeysIn?>("UseKeysIn")
+    ?? throw new InvalidOperationException("UseKeysIn is not configured.");
 var settings = builder.Configuration.GetSection(custodian.ToString());
 var custodianBuilder = custodian switch
 {

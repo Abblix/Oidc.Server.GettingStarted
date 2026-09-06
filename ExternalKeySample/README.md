@@ -68,6 +68,13 @@ curl -sk -o /dev/null -w "%{http_code}\n" -X POST https://localhost:5001/connect
 docker compose down && docker compose up -d
 ```
 
+That 500 is what the token endpoint has to say here: RFC 6749 section 5.2 lists the error codes it may return, and
+an unreachable key store is none of them. The `server_error` code belongs to the authorization endpoint, which
+needs it because a 500 cannot travel through a redirect. What the body carries depends on the environment: the
+launch profile runs the sample in Development, where ASP.NET Core answers with the exception and its stack trace,
+naming the custodian key path. In Production the same failure is a bare 500. Neither is a shaped OAuth error, and
+a real provider would decide which of the two its operators get.
+
 **The encryption path.** Turn encryption on and introspect the result:
 
 ```bash
@@ -123,8 +130,10 @@ full trade-off is in [EXTERNAL_KEYS.md](https://github.com/Abblix/Oidc.Server/bl
 ## Switch to Azure Key Vault
 
 Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and create two RSA keys named
-`oidc-sign` and `oidc-enc` in it. Credentials come from `DefaultAzureCredential` (Azure CLI sign-in, a managed
-identity, or environment variables) - never from configuration. Azure Key Vault's Standard tier with
+`oidc-sign` and `oidc-enc` in it. The package takes credentials either from a service principal named in
+configuration or, with those left unset, from `DefaultAzureCredential` (Azure CLI sign-in, a managed identity, or
+environment variables). This sample configures only the second, and its `Azure` section carries no credential
+fields at all, so there is nowhere in a committed file for a secret to end up. Azure Key Vault's Standard tier with
 software-protected RSA keys has no per-key monthly fee, so a demo stays within the free credit.
 
 `UseKeysIn` works the same against Azure. For `Custodian`, only the custodian call changes: `AddAzureCustodian`
@@ -143,12 +152,12 @@ Blob Data Contributor on the container.
 | `Provider:Issuer` | The OIDC issuer identifier and the base URL the server runs on. |
 | `Provider:EncryptAccessToken` | `true` encrypts access tokens (JWE) to exercise the unwrap path; `false` leaves them a verifiable JWS. |
 | `Provider:Scope` | The scope the demo client may request. |
-| `Provider:ClientId` / `Provider:ClientSecret` | The `client_credentials` client's identity (the secret is hashed before storage). |
+| `Provider:ClientId` / `Provider:ClientSecretSha512Hash` | The `client_credentials` client's identity. Configuration carries the SHA-512 hash, base64-encoded, so the recoverable secret is not in a file the provider ships. The demo secret is `secret`, which is what the request examples above send. |
 | `Provider:SigningKeyName` / `Provider:EncryptionKeyName` | The custodian's key names. They sit here, not in the `Vault` or `Azure` section, because they are not part of the connection: the same names work whichever custodian holds the keys. |
 | `Provider:KeyEncryptionKeyName` | The custodian's key that seals the minted keys. Used only when `UseKeysIn` is `Process`. |
 | `Vault:Address` | Base URL of the Vault / OpenBao server. |
 | `Vault:TransitMount` | Mount path of the Transit engine (default `transit`). |
-| `Vault` token | Presented as `X-Vault-Token`, taken from the `Vault__Token` environment variable, never hardcoded. |
+| `Vault:Token` | Presented as `X-Vault-Token`. Bound like any other setting, so the sample supplies it as the `Vault__Token` environment variable rather than writing it into `appsettings.json`. Production replaces it with the `Vault:Authentication` AppRole or Kubernetes section, which issues short-lived tokens instead. |
 | `Azure:KeyVaultUri` | The vault URI, e.g. `https://my-vault.vault.azure.net/`. |
 
 ## How it maps to the library
