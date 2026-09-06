@@ -7,7 +7,7 @@ The question a reader arrives with is "how do I know the event is genuine", and 
 ## What it demonstrates
 
 - The transmitter side: a signing key published at `/.well-known/jwks.json`, `AddSecurityEvents` with the CAEP event registry, `AddSharedSignalsTransmitter`, streams declared in `appsettings.json` through `AddSharedSignalsConfiguredStreams`, and one `DispatchAsync` call at the place where the revocation actually happens.
-- The receiver side: `AddJwksKeyResolution` pointed at the transmitter as the trust root, `AddSharedSignalsReceiver` carrying the expected issuer and audience, `AddDistributedReplayCache` as a second line against redelivery, `MapPushDeliveryEndpoint` for the incoming POST, and a `SessionStore` implementing `ISecurityEventSink`, which is the only class in the sample the application itself had to write.
+- The receiver side: `AddJwksKeyResolution` pointed at the transmitter as the trust root, `AddSharedSignalsReceiver` carrying the expected issuer and audience, `AddDistributedReplayCache` recording what was accepted, `MapPushDeliveryEndpoint` for the incoming POST, and a `SessionStore` implementing `ISecurityEventSink`, which is the only class in the sample the application itself had to write.
 - Why a transmitter refuses to deliver into its own network. A receiver names its own delivery endpoint, so a transmitter that POSTs wherever it is told is a server-side request forgery engine with the deployment's network position. Private hosts are refused by default; both halves of this sample run on `localhost`, which is precisely that case, so the operator permits those destinations explicitly through `AllowedReceiverAddresses`.
 - What a key rollover looks like from the receiving side, including the window in which it goes wrong.
 
@@ -98,7 +98,9 @@ What comes back is the key's public description: its type, id, algorithm and int
 
 Read the `kid` from the JWK Set, restart `TransmitterApp`, and read it again. It changed, because the sample mints a key per run and mints the id with it. Revoke another session and it arrives: the receiver met a `kid` it did not hold, refetched the key set, and verified against the new key.
 
-Now fix `KeyId` to a constant and restart again. Every delivery gets a `400` from then on, and the transmitter's log names it `invalid_key`. That names the symptom, not the cause: it says the receiver could not verify the signature, which is equally what a corrupt token or a wrong algorithm looks like. The cause is that the receiver is caching by key id, so a new key wearing the old name is a key it is confident it already holds and never refetches.
+Now fix `KeyId` to a constant and restart again. Deliveries start failing, and the transmitter's log names the verdict `invalid_key`. That names the symptom, not the cause: it is equally what a tampered payload or a wrong algorithm looks like. The cause is that the receiver caches by key id, so a new key wearing the old name is one it is confident it already holds and never refetches on that signal.
+
+Leave it running and it heals on its own, which is the confusing part. The cached set also has an ordinary lifetime, `JwksKeyResolutionOptions.CacheLifetime`, fifteen minutes by default, and when that expires the receiver refetches for its own reasons and picks up the new key under the pinned name. The outage lasts until then, and every event refused inside it is already gone.
 
 The lesson generalizes past this sample. A key id is not a label for the slot a key sits in; it is the name of that key, and it changes when the key does.
 

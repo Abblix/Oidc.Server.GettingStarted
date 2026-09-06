@@ -12,14 +12,15 @@ var builder = WebApplication.CreateBuilder(args);
 const string IssuerKey = "Issuer";
 const string StreamsSection = "SharedSignals:Streams";
 
-// The issuer is the identity this transmitter claims in every token it signs, and the receiver matches it
-// against its own expected issuers. A settings file that lost the key would announce an identity nobody
-// configured, and the receiver would stop believing a transmitter that is otherwise working.
+// The issuer is the identity this transmitter claims in every token it signs, and it also decides where
+// the receiver is told to fetch keys, three lines below. Were this defaulted, a settings file that lost
+// the key would announce an identity nobody configured, and the receiver's expected issuers would stop
+// matching a transmitter that is otherwise working.
 var issuer = builder.Configuration[IssuerKey]
     ?? throw new InvalidOperationException($"Configuration key '{IssuerKey}' is missing.");
 
-// A transmitter whose stream declarations went missing starts cleanly, delivers nothing and logs nothing,
-// which is the emptiest kind of failure to diagnose.
+// Were this defaulted to an empty list, a transmitter whose stream declarations went missing would start
+// cleanly, deliver nothing and log nothing, which is the emptiest kind of failure to diagnose.
 var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList<ConfiguredStream>>()
     ?? throw new InvalidOperationException($"Configuration section '{StreamsSection}' is missing.");
 

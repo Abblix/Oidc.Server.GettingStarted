@@ -16,8 +16,9 @@ const string AudienceKey = "Audience";
 var transmitter = builder.Configuration[TransmitterKey]
     ?? throw new InvalidOperationException($"Configuration key '{TransmitterKey}' is missing.");
 
-// The audience is what stops an event legitimately issued for somebody else from being replayed here, so
-// a wrong value silently widens what this receiver accepts.
+// The audience is what stops an event legitimately issued for somebody else from being replayed here.
+// Read as required rather than guessed: a receiver that invents its own audience accepts events addressed
+// elsewhere, and nothing about that looks wrong from either side.
 var self = builder.Configuration[AudienceKey]
     ?? throw new InvalidOperationException($"Configuration key '{AudienceKey}' is missing.");
 
@@ -46,8 +47,11 @@ builder.Services.AddJwksKeyResolution(options =>
     options.RolloverRefetchCooldown = TimeSpan.Zero;
 });
 
-// Duplicate suppression is a second line, not the first: RFC 8935 lets a transmitter redeliver whatever
-// the earlier response was, so the sink must be idempotent regardless of this cache.
+// This records what the receiver accepted; it does not refuse a repeat. The entry is written only after
+// the sink has accepted the event, because one written first would stand even when the sink refused, and
+// the transmitter's retry would then be answered 202 with nobody having seen the event. So a duplicate
+// reaches the sink again - RFC 8935 lets a transmitter redeliver whatever the earlier response was - and
+// idempotency in the sink is the only protection there is, rather than a second line behind this cache.
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddDistributedReplayCache();
 
