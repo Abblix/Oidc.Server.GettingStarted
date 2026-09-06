@@ -24,49 +24,41 @@ builder.Services.AddDistributedMemoryCache();
 // middleware must be present even with no custom policy.
 builder.Services.AddCors();
 
-// Every member of the section is required, so a missing one stops the server here rather than being replaced by a
-// value nobody chose. That matters most for the client secret's hash: a default in code would be a credential in
-// code, which is the thing this sample exists to argue against.
+// Every value the sample cannot invent carries no default here: a default in code for the client secret's hash
+// would be credential material in code, and a default for a name or a URL is a second copy of a line
+// appsettings.json already holds. The two members that ARE optional say so in their own type - the encryption
+// toggle and the algorithm minted keys use. The binder does not honour `required`, leaving an absent setting
+// null, so each value is passed through Required at the point it is USED rather than in a list up front: three
+// of them are read in one posture only, and a list would refuse a configuration that is complete for the other.
 var provider = builder.Configuration.GetSection(ProviderOptions.SectionName).Get<ProviderOptions>()
     ?? throw new InvalidOperationException($"The '{ProviderOptions.SectionName}' section is not configured.");
-
-// The configuration binder does not honour `required`: it leaves an absent setting null, and the null surfaces
-// much later inside whatever first reads it, naming a framework parameter instead of the setting. So each one is
-// named here, where the message can say which line of appsettings.json is missing.
-foreach (var (name, value) in new[]
-         {
-             (nameof(ProviderOptions.Issuer), provider.Issuer),
-             (nameof(ProviderOptions.Scope), provider.Scope),
-             (nameof(ProviderOptions.ClientId), provider.ClientId),
-             (nameof(ProviderOptions.ClientSecretSha512Hash), provider.ClientSecretSha512Hash),
-             (nameof(ProviderOptions.SigningKeyName), provider.SigningKeyName),
-             (nameof(ProviderOptions.EncryptionKeyName), provider.EncryptionKeyName),
-             (nameof(ProviderOptions.KeyEncryptionKeyName), provider.KeyEncryptionKeyName),
-         })
-{
-    if (string.IsNullOrWhiteSpace(value))
-        throw new InvalidOperationException($"'{ProviderOptions.SectionName}:{name}' is not configured.");
-}
 
 // AddOidcServices is the core plus this package's transport, and the MVC package spells it identically, so
 // swapping adapters changes the package reference and the endpoint mapping rather than this line.
 builder.Services.AddOidcServices(options =>
 {
-    options.Issuer = provider.Issuer;
+    options.Issuer = Required(nameof(provider.Issuer), provider.Issuer);
 
     // No SigningKeys / EncryptionKeys are set here on purpose: the custodian's IAuthServiceKeysProvider
     // supplies the public-only external keys, and every private operation runs inside the custodian.
     options.ServiceTokens.AccessToken.Encrypt = provider.EncryptAccessToken;
 
-    options.Scopes = [new ScopeDefinition(provider.Scope)];
+    options.Scopes = [new ScopeDefinition(Required(nameof(provider.Scope), provider.Scope))];
     options.Clients =
     [
-        new ClientInfo(provider.ClientId)
+        new ClientInfo(Required(nameof(provider.ClientId), provider.ClientId))
         {
-            ClientSecrets = [new ClientSecret { Sha512Hash = DecodeSecretHash(provider.ClientSecretSha512Hash) }],
+            ClientSecrets =
+            [
+                new ClientSecret
+                {
+                    Sha512Hash = DecodeSecretHash(
+                        Required(nameof(provider.ClientSecretSha512Hash), provider.ClientSecretSha512Hash)),
+                },
+            ],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
             AllowedGrantTypes = [GrantTypes.ClientCredentials],
-            AllowedScopes = [provider.Scope],
+            AllowedScopes = [Required(nameof(provider.Scope), provider.Scope)],
         },
     ];
 });
@@ -104,13 +96,15 @@ switch (placement)
         // and CEK unwrap is a round-trip to it.
         custodianBuilder.UseKeysInCustodian(new CustodianHeldKeys
         {
-            SigningKeyName = provider.SigningKeyName,
+            SigningKeyName = Required(nameof(provider.SigningKeyName), provider.SigningKeyName),
 
             // In general an encryption key serves two purposes: encrypting the provider's own tokens, and
             // decrypting inbound JWE a client sent (an encrypted request object or client assertion). This sample
             // only ever needs the first, since client_credentials sends neither, so it names the key only while it
             // encrypts its tokens. Left unset, no encryption key is published at all.
-            EncryptionKeyName = provider.EncryptAccessToken ? provider.EncryptionKeyName : null,
+            EncryptionKeyName = provider.EncryptAccessToken
+                ? Required(nameof(provider.EncryptionKeyName), provider.EncryptionKeyName)
+                : null,
         });
         break;
 
@@ -121,7 +115,7 @@ switch (placement)
         // this trades the custodian-held placement's "never in the process" for no per-token round-trip.
         var minted = custodianBuilder.UseKeysInProcess(new MintedKeys
         {
-            KeyEncryptionKeyName = provider.KeyEncryptionKeyName,
+            KeyEncryptionKeyName = Required(nameof(provider.KeyEncryptionKeyName), provider.KeyEncryptionKeyName),
 
             // Config drives this directly: it is null unless the configuration sets it, and null mints no
             // encryption key, so it is left out of appsettings.json until this sample encrypts its own tokens.
@@ -151,6 +145,14 @@ app.UseCors();
 app.MapOidcEndpoints();
 
 app.Run();
+
+// Stands where the value is consumed rather than in a list of its own, so a setting that stops being read cannot
+// leave a check behind demanding it. The message names the section and the member, which is what the reader needs
+// and what the framework's own null reference will not say.
+static string Required(string name, string? value) =>
+    !string.IsNullOrWhiteSpace(value)
+        ? value
+        : throw new InvalidOperationException($"'{ProviderOptions.SectionName}:{name}' is not configured.");
 
 // Named rather than inline so a mistyped setting says which one it is: the framework's own FormatException for
 // base64 names neither the setting nor this sample, and the likeliest mistake is writing the secret itself here.

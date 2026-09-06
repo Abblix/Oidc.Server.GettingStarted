@@ -4,8 +4,10 @@
 /// Binds the <c>Provider</c> section of appsettings: the OIDC issuer, the single client_credentials client
 /// this demo issues tokens to, and the toggle that turns on access-token encryption to exercise the
 /// custodian's unwrap path. Keeping these in configuration means the sample is retargeted without touching code.
-/// Nothing here carries a default, so configuration is the single place each value is written and an omission
-/// stops the server rather than substituting a value the reader never chose.
+/// No value the sample cannot invent carries a default, so configuration is the single place each is written and
+/// an omission stops the server rather than substituting something the reader never chose. Two members are
+/// genuinely optional and are the two without <c>required</c>: <see cref="EncryptAccessToken"/>, which is off
+/// unless asked for, and <see cref="EncryptionAlgorithm"/>, whose absence is what says no encryption key is minted.
 /// </summary>
 public sealed class ProviderOptions
 {

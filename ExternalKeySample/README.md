@@ -155,7 +155,7 @@ Blob Data Contributor on the container.
 | `Provider:Issuer` | The OIDC issuer identifier and the base URL the server runs on. |
 | `Provider:EncryptAccessToken` | `true` encrypts access tokens (JWE) to exercise the unwrap path; `false` leaves them a verifiable JWS. |
 | `Provider:Scope` | The scope the demo client may request. |
-| `Provider:ClientId` / `Provider:ClientSecretSha512Hash` | The `client_credentials` client's identity. The configuration the server loads carries the SHA-512 hash, base64-encoded, rather than the secret itself; the sample holds no default for it, so an absent value stops the server. The demo secret is `secret`, which is what the request examples above send. To use a different one, compute its hash with `printf %s 'your-secret' \| openssl dgst -sha512 -binary \| base64 -w0`. |
+| `Provider:ClientId` / `Provider:ClientSecretSha512Hash` | The `client_credentials` client's identity. The configuration the server loads carries the SHA-512 hash, base64-encoded, rather than the secret itself; the sample holds no default for it, so an absent value stops the server. The demo secret is `secret`, which is what the request examples above send. To use a different one, compute its hash with `printf %s 'your-secret' \| openssl dgst -sha512 -binary \| openssl base64 -A`. |
 | `Provider:SigningKeyName` / `Provider:EncryptionKeyName` | The custodian's key names. They sit here, not in the `Vault` or `Azure` section, because they are not part of the connection: the same names work whichever custodian holds the keys. |
 | `Provider:KeyEncryptionKeyName` | The custodian's key that seals the minted keys. Used only when `UseKeysIn` is `Process`. |
 | `Vault:Address` | Base URL of the Vault / OpenBao server. |
