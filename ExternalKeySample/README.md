@@ -44,7 +44,8 @@ curl -sk -X POST https://localhost:5001/connect/token \
   -d "grant_type=client_credentials&client_id=demo-service&client_secret=secret&scope=api"
 ```
 
-The `access_token` is a three-part JWS. Its header names `"alg":"RS256"` and `"kid":"oidc-sign"`.
+The `access_token` is a three-part JWS. Its header names `"alg":"RS256"` and `"kid":"oidc-sign:1"` - the key
+name plus the Transit key version, because a `kid` addresses one version and not the key as a whole.
 
 ## Verify it yourself
 
@@ -74,7 +75,8 @@ export Provider__EncryptAccessToken=true
 dotnet run --urls https://localhost:5001
 ```
 
-Now the `access_token` is a five-part JWE (`"alg":"RSA-OAEP-256"`, `"kid":"oidc-enc"`). Introspecting it makes
+Now the `access_token` is a five-part JWE (`"alg":"RSA-OAEP-256"`, `"enc":"A256CBC-HS512"`, `"kid":"oidc-enc:1"`).
+Introspecting it makes
 the server unwrap the CEK inside the custodian:
 
 ```bash

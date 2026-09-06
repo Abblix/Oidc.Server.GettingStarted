@@ -6,13 +6,11 @@
     <RootNamespace>ExternalKeySample</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Local project references validate the sample against the in-development 2.4 external-key packages before
-         they publish. The Vault and Azure custodians are the Abblix.Jwt.Vault / .Azure packages: an
-         AddVaultCustodian / AddAzureCustodian call plus the key-placement call after it, and no custodian code here.
-         When 2.4 reaches nuget.org, replace these with PackageReference to Abblix.Oidc.Server.MinimalApi / .Vault
-         / .Azure (2.4.x) and delete NuGet.config. The Azure SDK arrives transitively through the .Azure package. -->
-    <ProjectReference Include="..\..\Oidc.Server\src\Abblix.Oidc.Server.MinimalApi\Abblix.Oidc.Server.MinimalApi.csproj" />
-    <ProjectReference Include="..\..\Oidc.Server\src\Abblix.Jwt.Vault\Abblix.Jwt.Vault.csproj" />
-    <ProjectReference Include="..\..\Oidc.Server\src\Abblix.Jwt.Azure\Abblix.Jwt.Azure.csproj" />
+    <!-- The Vault and Azure custodians are the Abblix.Jwt.Vault / .Azure packages: an AddVaultCustodian or
+         AddAzureCustodian call plus the key-placement call after it, and no custodian code in this sample.
+         The Azure SDK arrives transitively through the .Azure package. -->
+    <PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="2.4.0" />
+    <PackageReference Include="Abblix.Jwt.Vault" Version="2.4.0" />
+    <PackageReference Include="Abblix.Jwt.Azure" Version="2.4.0" />
   </ItemGroup>
 </Project>
