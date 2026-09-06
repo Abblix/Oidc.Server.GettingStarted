@@ -4,13 +4,15 @@
 /// Binds the <c>Provider</c> section of appsettings: the OIDC issuer, the single client_credentials client
 /// this demo issues tokens to, and the toggle that turns on access-token encryption to exercise the
 /// custodian's unwrap path. Keeping these in configuration means the sample is retargeted without touching code.
+/// Nothing here carries a default, so configuration is the single place each value is written and an omission
+/// stops the server rather than substituting a value the reader never chose.
 /// </summary>
 public sealed class ProviderOptions
 {
     public const string SectionName = "Provider";
 
     /// <summary>The OIDC issuer identifier, which is also the base URL the server runs on.</summary>
-    public string Issuer { get; set; } = "https://localhost:5001";
+    public required string Issuer { get; set; }
 
     /// <summary>
     /// When true, access tokens are encrypted (JWE): validating one drives the remote CEK unwrap through the
@@ -19,30 +21,29 @@ public sealed class ProviderOptions
     public bool EncryptAccessToken { get; set; }
 
     /// <summary>The scope the demo client is allowed to request.</summary>
-    public string Scope { get; set; } = "api";
+    public required string Scope { get; set; }
 
     /// <summary>The client_credentials client identifier.</summary>
-    public string ClientId { get; set; } = "demo-service";
+    public required string ClientId { get; set; }
 
     /// <summary>
-    /// The SHA-512 hash of the demo client's secret, base64-encoded, which is what configuration carries: the
-    /// recoverable secret is never written to a file a provider ships. The demo secret is <c>secret</c>, and the
-    /// README's request examples use it.
+    /// The SHA-512 hash of the demo client's secret, base64-encoded. The configuration the server loads carries
+    /// the hash rather than the secret, and it is the only place either appears: the README shows how to compute
+    /// one for a different secret.
     /// </summary>
-    public string ClientSecretSha512Hash { get; set; } =
-        "vSsar3708Jvp9Szi2NWZZ02Bqp1qRCFpbcTZPdBhnWgs5WtNZKnvCXdhztmeD2cmW192CF5bDufKRpayrW/isg==";
+    public required string ClientSecretSha512Hash { get; set; }
 
     /// <summary>
     /// The custodian's name for the signing key. It lives here rather than in the Vault or Azure section because
     /// it is not a property of the connection: the same name is used whichever custodian holds the key.
     /// </summary>
-    public string SigningKeyName { get; set; } = "oidc-sign";
+    public required string SigningKeyName { get; set; }
 
     /// <summary>
     /// The custodian's name for the key that unwraps encrypted-token CEKs. Used only while
     /// <see cref="EncryptAccessToken"/> is on.
     /// </summary>
-    public string EncryptionKeyName { get; set; } = "oidc-enc";
+    public required string EncryptionKeyName { get; set; }
 
     /// <summary>
     /// The JWE key-management algorithm for the encryption key the server mints, in the placement where keys live in
@@ -57,5 +58,5 @@ public sealed class ProviderOptions
     /// <see cref="UseKeysIn.Process"/> placement, where the server mints its own signing keys and the custodian holds
     /// just this one key to protect them.
     /// </summary>
-    public string KeyEncryptionKeyName { get; set; } = "oidc-kek";
+    public required string KeyEncryptionKeyName { get; set; }
 }

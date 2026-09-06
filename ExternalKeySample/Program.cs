@@ -24,8 +24,29 @@ builder.Services.AddDistributedMemoryCache();
 // middleware must be present even with no custom policy.
 builder.Services.AddCors();
 
+// Every member of the section is required, so a missing one stops the server here rather than being replaced by a
+// value nobody chose. That matters most for the client secret's hash: a default in code would be a credential in
+// code, which is the thing this sample exists to argue against.
 var provider = builder.Configuration.GetSection(ProviderOptions.SectionName).Get<ProviderOptions>()
-    ?? new ProviderOptions();
+    ?? throw new InvalidOperationException($"The '{ProviderOptions.SectionName}' section is not configured.");
+
+// The configuration binder does not honour `required`: it leaves an absent setting null, and the null surfaces
+// much later inside whatever first reads it, naming a framework parameter instead of the setting. So each one is
+// named here, where the message can say which line of appsettings.json is missing.
+foreach (var (name, value) in new[]
+         {
+             (nameof(ProviderOptions.Issuer), provider.Issuer),
+             (nameof(ProviderOptions.Scope), provider.Scope),
+             (nameof(ProviderOptions.ClientId), provider.ClientId),
+             (nameof(ProviderOptions.ClientSecretSha512Hash), provider.ClientSecretSha512Hash),
+             (nameof(ProviderOptions.SigningKeyName), provider.SigningKeyName),
+             (nameof(ProviderOptions.EncryptionKeyName), provider.EncryptionKeyName),
+             (nameof(ProviderOptions.KeyEncryptionKeyName), provider.KeyEncryptionKeyName),
+         })
+{
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException($"'{ProviderOptions.SectionName}:{name}' is not configured.");
+}
 
 // AddOidcServices is the core plus this package's transport, and the MVC package spells it identically, so
 // swapping adapters changes the package reference and the endpoint mapping rather than this line.
@@ -42,7 +63,7 @@ builder.Services.AddOidcServices(options =>
     [
         new ClientInfo(provider.ClientId)
         {
-            ClientSecrets = [new ClientSecret { Sha512Hash = Convert.FromBase64String(provider.ClientSecretSha512Hash) }],
+            ClientSecrets = [new ClientSecret { Sha512Hash = DecodeSecretHash(provider.ClientSecretSha512Hash) }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
             AllowedGrantTypes = [GrantTypes.ClientCredentials],
             AllowedScopes = [provider.Scope],
@@ -130,3 +151,20 @@ app.UseCors();
 app.MapOidcEndpoints();
 
 app.Run();
+
+// Named rather than inline so a mistyped setting says which one it is: the framework's own FormatException for
+// base64 names neither the setting nor this sample, and the likeliest mistake is writing the secret itself here.
+static byte[] DecodeSecretHash(string value)
+{
+    try
+    {
+        return Convert.FromBase64String(value);
+    }
+    catch (FormatException exception)
+    {
+        throw new InvalidOperationException(
+            $"'{ProviderOptions.SectionName}:{nameof(ProviderOptions.ClientSecretSha512Hash)}' is not base64. " +
+            "It holds the base64 SHA-512 hash of the client secret, not the secret.",
+            exception);
+    }
+}

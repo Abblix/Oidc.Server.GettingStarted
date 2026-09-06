@@ -32,7 +32,7 @@ lives in an HSM/KMS the way a production identity provider keeps it.
 Start the custodian and provision its keys, then run the provider:
 
 ```bash
-docker compose up -d          # OpenBao Transit + the oidc-sign / oidc-enc RSA keys
+docker compose up -d          # OpenBao Transit + the oidc-sign / oidc-enc / oidc-kek RSA keys
 export Vault__Token=root      # dev-mode token; production uses AppRole or Kubernetes auth
 dotnet run --urls https://localhost:5001
 ```
@@ -130,10 +130,13 @@ full trade-off is in [EXTERNAL_KEYS.md](https://github.com/Abblix/Oidc.Server/bl
 ## Switch to Azure Key Vault
 
 Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and create two RSA keys named
-`oidc-sign` and `oidc-enc` in it. The package takes credentials either from a service principal named in
-configuration or, with those left unset, from `DefaultAzureCredential` (Azure CLI sign-in, a managed identity, or
-environment variables). This sample configures only the second, and its `Azure` section carries no credential
-fields at all, so there is nowhere in a committed file for a secret to end up. Azure Key Vault's Standard tier with
+`oidc-sign` and `oidc-enc` in it, and grant the identity you sign in as Key Vault Crypto User on them - every
+signature and unwrap is that identity calling the vault.
+
+The package takes credentials two ways: a service principal named by `Azure:TenantId`, `Azure:ClientId` and
+`Azure:ClientSecret`, or, with those left unset, `DefaultAzureCredential` (Azure CLI sign-in, a managed identity,
+or environment variables). This sample uses the second and its `Azure` section carries no credential fields at
+all, so there is nowhere in a committed file for a secret to end up. Azure Key Vault's Standard tier with
 software-protected RSA keys has no per-key monthly fee, so a demo stays within the free credit.
 
 `UseKeysIn` works the same against Azure. For `Custodian`, only the custodian call changes: `AddAzureCustodian`
@@ -152,7 +155,7 @@ Blob Data Contributor on the container.
 | `Provider:Issuer` | The OIDC issuer identifier and the base URL the server runs on. |
 | `Provider:EncryptAccessToken` | `true` encrypts access tokens (JWE) to exercise the unwrap path; `false` leaves them a verifiable JWS. |
 | `Provider:Scope` | The scope the demo client may request. |
-| `Provider:ClientId` / `Provider:ClientSecretSha512Hash` | The `client_credentials` client's identity. Configuration carries the SHA-512 hash, base64-encoded, so the recoverable secret is not in a file the provider ships. The demo secret is `secret`, which is what the request examples above send. |
+| `Provider:ClientId` / `Provider:ClientSecretSha512Hash` | The `client_credentials` client's identity. The configuration the server loads carries the SHA-512 hash, base64-encoded, rather than the secret itself; the sample holds no default for it, so an absent value stops the server. The demo secret is `secret`, which is what the request examples above send. To use a different one, compute its hash with `printf %s 'your-secret' \| openssl dgst -sha512 -binary \| base64 -w0`. |
 | `Provider:SigningKeyName` / `Provider:EncryptionKeyName` | The custodian's key names. They sit here, not in the `Vault` or `Azure` section, because they are not part of the connection: the same names work whichever custodian holds the keys. |
 | `Provider:KeyEncryptionKeyName` | The custodian's key that seals the minted keys. Used only when `UseKeysIn` is `Process`. |
 | `Vault:Address` | Base URL of the Vault / OpenBao server. |
