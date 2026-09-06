@@ -134,7 +134,9 @@ Set `KeyCustodian` to `Azure`, point `Azure:KeyVaultUri` at your vault, and crea
 and every unwrap is that identity calling the vault. On a vault with Azure RBAC that is the Key Vault Crypto User
 role. On a vault still using access policies it is the key permissions `get`, `list`, `sign` and `decrypt`.
 `decrypt` is the one that surprises: the unwrap goes through Key Vault's decrypt operation, so a policy granting
-`unwrapKey` and not `decrypt` signs tokens happily and then fails introspection with a 403.
+`unwrapKey` and not `decrypt` signs tokens happily and then fails introspection with a 403. Creating the keys is a
+separate and more privileged act than using them, so neither that permission set nor the Crypto User role can do
+it: create them with an identity that carries Key Vault Crypto Officer or an equivalent policy.
 
 The package takes credentials two ways: a service principal named by `Azure:TenantId`, `Azure:ClientId` and
 `Azure:ClientSecret`, or, with those left unset, `DefaultAzureCredential` (Azure CLI sign-in, a managed identity,
@@ -145,9 +147,11 @@ software-protected RSA keys has no per-key monthly fee, so a demo stays within t
 `UseKeysIn` works the same against Azure. For `Custodian`, only the custodian call changes: `AddAzureCustodian`
 satisfies the same `IKeyCustodian` seam as the Vault one, so the switch is driven purely by configuration. For
 `Process`, the ring lives in Blob Storage rather than Vault's KV engine, so there is a little more to set up:
-create an `oidc-kek` RSA key in the vault, set `Azure:Blob:ServiceUri` to a storage account's blob endpoint (the
-container is created on first use), and give the running identity the same key rights as above on `oidc-kek` plus
-Storage Blob Data Contributor on the container.
+create an `oidc-kek` RSA key in the vault and set `Azure:Blob:ServiceUri` to a storage account's blob endpoint.
+On `oidc-kek` the identity needs `get`, `list` and `decrypt` and no more: the server seals a minted key by
+encrypting to the key's public half in process, so nothing signs or wraps with the KEK at the vault. It also needs
+Storage Blob Data Contributor scoped to the storage account rather than to the container, because the container
+does not exist until the first run creates it.
 
 ## Settings
 
