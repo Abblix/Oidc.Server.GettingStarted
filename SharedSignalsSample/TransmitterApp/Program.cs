@@ -28,12 +28,18 @@ var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList
 // misspelled key binds to nothing - makes the stream poll-delivered instead, and this sample maps no poll
 // endpoint, so the transmitter would start cleanly, deliver nothing and log nothing. The section is read
 // as required above for that reason; the value this sample depends on earns the same treatment.
-if (streams.FirstOrDefault(stream => stream.PushEndpointUrl is null) is { } undeliverable)
+// Identified by position, because the binder does not honour "required" either: a stream that lost its
+// name as well says nothing about itself, and the position is the one thing a settings file always has.
+foreach (var (stream, position) in streams.Select((stream, position) => (stream, position)))
 {
-    throw new InvalidOperationException(
-        $"Stream '{undeliverable.StreamId ?? undeliverable.ReceiverId}' declares no PushEndpointUrl, "
-        + "which makes it poll-delivered. "
-        + "This sample delivers by push only.");
+    // A stream missing everything is the library's diagnosis to make, and it names the member that is
+    // missing. Refusing it here first would report the absent push address as the whole story.
+    if (stream is { PushEndpointUrl: null, ReceiverId: not null })
+    {
+        throw new InvalidOperationException(
+            $"The declared stream at position {position} ('{stream.StreamId ?? stream.ReceiverId}') "
+            + "has no PushEndpointUrl, which makes it poll-delivered. This sample delivers by push only.");
+    }
 }
 
 // A real transmitter takes its signing key from the same place the rest of the deployment does - a key
@@ -96,6 +102,11 @@ app.MapGet("/.well-known/jwks.json",
 // appsettings.json, so nothing needs to create one over HTTP - and the management API is the surface that
 // has to be guarded by scope, because whoever can create a stream can ask to be told about your users.
 // MapSharedSignalsTransmitterEndpoints() maps that API and this document together.
+//
+// Mapping the document alone is not the clean subset it looks like. In 2.4 the document is built from the
+// route prefix rather than from what was mapped, so it advertises the management addresses regardless: a
+// receiver that discovers this transmitter reads addresses for creating a stream, reading its status,
+// adding and removing subjects and requesting verification, and every one of them answers 404 here.
 app.MapSharedSignalsConfigurationDocument();
 
 // The one call a host makes when the thing actually happens. Everything else in this file is setup.
