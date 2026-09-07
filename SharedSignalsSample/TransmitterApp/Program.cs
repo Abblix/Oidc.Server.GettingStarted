@@ -31,7 +31,8 @@ var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList
 if (streams.FirstOrDefault(stream => stream.PushEndpointUrl is null) is { } undeliverable)
 {
     throw new InvalidOperationException(
-        $"Stream '{undeliverable.StreamId}' declares no PushEndpointUrl, which makes it poll-delivered. "
+        $"Stream '{undeliverable.StreamId ?? undeliverable.ReceiverId}' declares no PushEndpointUrl, "
+        + "which makes it poll-delivered. "
         + "This sample delivers by push only.");
 }
 
