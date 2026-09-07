@@ -25,9 +25,14 @@ var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList
     ?? throw new InvalidOperationException($"Configuration section '{StreamsSection}' is missing.");
 
 // Nothing checks these declarations here on purpose. A misspelled PushEndpointUrl binds to nothing, which
-// would leave the stream poll-delivered with no poll endpoint mapped - and the library refuses that at
-// startup itself, naming both ways out: set PushEndpointUrl, or give the transmitter a poll address. A
-// check of our own would only arrive first with a narrower message.
+// would leave the stream poll-delivered, and the library refuses to start on that, naming both ways out:
+// set PushEndpointUrl, or give the transmitter a poll address. In this pair only the first delivers
+// anything, since the receiver is push-only. A check of our own would arrive first with a narrower
+// message.
+//
+// That refusal holds while no poll endpoint is offered, which is this sample's case. Map the management
+// API instead of the document alone, as the comment below invites, and the same typo becomes a stream
+// quietly served by poll: the transmitter starts, delivers nothing, and the push-only receiver waits.
 
 // A real transmitter takes its signing key from the same place the rest of the deployment does - a key
 // vault, a certificate store. This sample mints one per run, so restarting it is a key rollover as the
