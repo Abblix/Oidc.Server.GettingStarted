@@ -21,6 +21,8 @@ Delivery here is a real HTTPS request from one process to another, so the pair n
 dotnet dev-certs https --trust
 ```
 
+The `curl -k` in the commands below is for your own probes only: it skips certificate validation because a shell reaching a local host is not what this sample is about. The two applications never do that to each other, and the delivery you are about to watch fails if either certificate does not check out.
+
 **Start the receiver.** Starting it first is the easier order to read, though not a requirement: a delivery that fails because nothing is listening leaves the event queued, and a later sweep takes it out again.
 
 ```shell
@@ -60,7 +62,16 @@ The transmitter narrates the delivery, and its last line is the receiver's verdi
 - `... - 400` - the receiver rejected the token. The signature did not verify, or the issuer or audience did not match.
 - A warning, `Push delivery failed for stream sample-stream; the sweep continued with the rest`, carrying an exception whose message begins `Refusing to deliver` - the transmitter never sent anything, because the address in `appsettings.json` is one it will not POST to. The rest of that message says why.
 
+A `404` in that same line means the transmitter reached the receiver and asked for a route it does not serve: `PushEndpoint` in the receiver's settings and `PushEndpointUrl` in the transmitter's stream have to name the same path.
+
 Silence in both logs after 30 seconds means the sweep found nothing to deliver: the stream in `appsettings.json` does not cover the event, or the revoke call never reached the transmitter.
+
+### Two warnings on startup that do not apply here
+
+The transmitter logs both of these before it is asked to do anything, and neither describes a problem in this sample. They are worth reading once, because telling an inapplicable warning from a real one is the skill this sample is for.
+
+- `2011`, no scope is checked on the Stream Management API. That API is not mapped here at all, so there is no unguarded surface. In 2.4 the warning is raised where the transmitter advertises itself rather than where the management routes are mapped.
+- `2012`, new streams will cover no subject. It describes streams created through the management API, and this transmitter creates none: its one stream is declared in `appsettings.json` with `"SubjectsMode": "All"`.
 
 ### Running them both from one terminal
 
@@ -71,7 +82,14 @@ dotnet run --project SharedSignalsSample/ReceiverApp > receiver.log 2>&1 &
 dotnet run --project SharedSignalsSample/TransmitterApp > transmitter.log 2>&1 &
 ```
 
-On Windows PowerShell, `Start-Process dotnet -ArgumentList 'run','--project','SharedSignalsSample/ReceiverApp' -RedirectStandardOutput receiver.log` does the same. Either way, read the logs for the two `Now listening` lines rather than assuming the ports came up. A process that failed to start leaves the port quiet in exactly the same way a slow one does.
+On Windows PowerShell:
+
+```powershell
+Start-Process dotnet -ArgumentList 'run','--project','SharedSignalsSample/ReceiverApp' -RedirectStandardOutput receiver.log -RedirectStandardError receiver.err.log
+Start-Process dotnet -ArgumentList 'run','--project','SharedSignalsSample/TransmitterApp' -RedirectStandardOutput transmitter.log -RedirectStandardError transmitter.err.log
+```
+
+The error streams are redirected separately because a host that refuses to start says why on that stream and nowhere else. Either way, read the logs for the two `Now listening` lines rather than assuming the ports came up. A process that failed to start leaves the port quiet in exactly the same way a slow one does.
 
 ## Verify it yourself
 
@@ -114,6 +132,12 @@ The sample sets it to zero so the rollover above happens the moment you restart 
 
 Point the receiver's `Transmitter` setting at some other address and restart it. Deliveries stop being accepted, and the reason is worth being precise about: the token's `iss` is no longer an issuer this receiver expects, and the profile checks that before it does any signature work. The receiver is not refusing because the POST came from an unexpected place; it never looks at that. It refuses because the event claims an issuer it was not configured to believe.
 
+### The audience is checked too
+
+Change `Audience` in `ReceiverApp/appsettings.json` to anything else, restart the receiver, and revoke another session. The delivery is refused, and the transmitter's log carries the verdict `invalid_audience`.
+
+That refusal is the one that stops a genuine event addressed to somebody else. The token is validly signed by an issuer this receiver trusts, and it still does not apply here, which is the whole reason `aud` exists: a receiver that accepts anything from a transmitter it believes will act on another receiver's notifications, and both sides will look correct while it does.
+
 ## Layout
 
 - `TransmitterApp/Program.cs`: the signing key and its `kid`, the JWK Set endpoint, `AddSecurityEvents`, `AddSharedSignalsTransmitter` with the allowed receiver addresses, and the revoke endpoint with its single `DispatchAsync`.
@@ -127,8 +151,11 @@ The Stream Management API is not mapped. This transmitter's streams come from it
 
 Poll delivery is not shown. Push is the harder half to get right, because it is the one where the transmitter makes an outbound request to an address someone else chose.
 
+Neither endpoint that matters is guarded. Anyone who can reach the transmitter's port can have it sign an event about any session and any user, and anyone who can reach the receiver's push endpoint can submit a token to it. The receiver still refuses what does not verify, so the signature is doing real work here - but in a deployment the revoke call sits behind whatever already authorises ending that session, and the push endpoint carries the credential the stream was registered with (`RequireAuthorization()` on one side, `PushAuthorizationHeader` on the other).
+
 An event that names only the user, rather than one of that user's sessions, is accepted and does nothing here. A real receiver answers it by closing every session it holds for that user; `SessionStore` says so where it makes the choice.
 
 ## The article behind this sample
 
-- Shared Signals: how identity systems deliver bad news: https://docs.abblix.com/docs/shared-signals-framework
+- Transmitting and Receiving Shared Signals Events in .NET: https://www.abblix.com/en/docs/shared-signals-guide - the walk through this sample, file by file.
+- How Identity Systems Deliver News That Cannot Wait: https://www.abblix.com/en/docs/shared-signals-framework - the map: what SETs, SSF, CAEP and RISC are, and why they are separate layers.

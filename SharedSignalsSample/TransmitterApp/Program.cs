@@ -24,6 +24,17 @@ var issuer = builder.Configuration[IssuerKey]
 var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList<ConfiguredStream>>()
     ?? throw new InvalidOperationException($"Configuration section '{StreamsSection}' is missing.");
 
+// The section being present is not the same as its values arriving. An absent PushEndpointUrl - a
+// misspelled key binds to nothing - makes the stream poll-delivered instead, and this sample maps no poll
+// endpoint, so the transmitter would start cleanly, deliver nothing and log nothing. The section is read
+// as required above for that reason; the value this sample depends on earns the same treatment.
+foreach (var stream in streams.Where(stream => stream.PushEndpointUrl is null))
+{
+    throw new InvalidOperationException(
+        $"Stream '{stream.StreamId}' declares no PushEndpointUrl, which makes it poll-delivered. "
+        + "This sample delivers by push only.");
+}
+
 // A real transmitter takes its signing key from the same place the rest of the deployment does - a key
 // vault, a certificate store. This sample mints one per run, so restarting it is a key rollover as the
 // receiving side sees one.
@@ -59,10 +70,14 @@ builder.Services.AddSharedSignalsTransmitter(new SharedSignalsTransmitterOptions
     // A receiver names its own delivery endpoint, so by default the transmitter refuses to POST to an
     // address inside its own network: otherwise a stream pointed at a metadata service turns the
     // transmitter into the attacker's HTTP client. Both sides of this sample run on one machine, which is
-    // exactly the case that refusal covers, so the operator permits those destinations explicitly.
+    // exactly the case that refusal covers, so without this list nothing would be delivered at all.
     //
-    // Derived from the declared streams rather than configured separately, so the address this transmitter
-    // permits and the address it pushes to cannot be edited apart.
+    // Read what this list is, because the name suggests a filter and it is the opposite: an address in it
+    // is EXEMPT from the refusal above. Deriving it from the declared streams therefore exempts every
+    // stream the settings file names, which is right for a sample whose stream set is the settings file
+    // and wrong wherever streams can be created through the management API - there an operator names the
+    // origins it trusts as a separate setting, so that declaring a stream is not the same act as
+    // authorising its destination.
     AllowedReceiverAddresses = [.. streams.Select(stream => stream.PushEndpointUrl).OfType<Uri>()],
 });
 
@@ -83,6 +98,12 @@ app.MapGet("/.well-known/jwks.json",
 app.MapSharedSignalsConfigurationDocument();
 
 // The one call a host makes when the thing actually happens. Everything else in this file is setup.
+//
+// Nothing guards it here, and that is a sample's licence rather than a pattern: anyone who can reach this
+// port can have this transmitter sign an event about any session and any user, and every receiver that
+// trusts the issuer will believe it, because a signature says who signed and not who asked. In a
+// deployment this call sits behind whatever already authorises "end this session" - the same check the
+// session's own owner passes - and this endpoint is not exposed at all.
 app.MapPost("/sessions/{sessionId}/revoke", async (
     string sessionId,
     string user,

@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 const string TransmitterKey = "Transmitter";
 const string AudienceKey = "Audience";
+const string PushEndpointKey = "PushEndpoint";
 
 // A receiver that falls back to a hardcoded transmitter trusts an issuer nobody configured, and fetches
 // its keys from there too.
@@ -21,6 +22,12 @@ var transmitter = builder.Configuration[TransmitterKey]
 // elsewhere, and nothing about that looks wrong from either side.
 var self = builder.Configuration[AudienceKey]
     ?? throw new InvalidOperationException($"Configuration key '{AudienceKey}' is missing.");
+
+// One value, two hosts: this route and the PushEndpointUrl of the transmitter's declared stream have to
+// name the same path. Written in code on this side it would be edited on one side alone, and the delivery
+// would then be answered 404 - which reads in the transmitter's log exactly like a receiver that is down.
+var pushEndpoint = builder.Configuration[PushEndpointKey]
+    ?? throw new InvalidOperationException($"Configuration key '{PushEndpointKey}' is missing.");
 
 builder.Services.AddSecurityEvents(options => options.Events.RegisterCaepEvents());
 
@@ -71,9 +78,16 @@ builder.Services.AddSingleton<ISecurityEventSink>(sp => sp.GetRequiredService<Se
 
 var app = builder.Build();
 
-// Where the transmitter pushes. The address is this receiver's to choose, and it is what was declared as
-// PushEndpointUrl on the other side.
-app.MapPushDeliveryEndpoint("/ssf/push");
+// Where the transmitter pushes. Nothing authenticates the caller here, so anyone who can reach this port
+// can submit a token and, if it verifies, be believed. That is survivable in this sample because the
+// signature, the issuer and the audience are checked before the sink is reached, and unsurvivable in a
+// deployment, where the endpoint carries the credential the stream was registered with:
+//
+//     app.MapPushDeliveryEndpoint(pushEndpoint).RequireAuthorization();
+//
+// with the matching PushAuthorizationHeader on the transmitter's stream. Without it the transmitter's
+// signature is the only thing standing between the sink and whoever found the port.
+app.MapPushDeliveryEndpoint(pushEndpoint);
 
 // So the sample can be checked without reading logs.
 app.MapGet("/revoked-sessions", (SessionStore sessions) => sessions.Revoked);
