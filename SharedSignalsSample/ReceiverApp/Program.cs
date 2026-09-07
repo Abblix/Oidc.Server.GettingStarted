@@ -25,7 +25,11 @@ var self = builder.Configuration[AudienceKey]
 
 // One value, two hosts: this route and the PushEndpointUrl of the transmitter's declared stream have to
 // name the same path. Written in code on this side it would be edited on one side alone, and the delivery
-// would then be answered 404 - which reads in the transmitter's log exactly like a receiver that is down.
+// would then be answered 404. Both hosts keep running and no event is lost - a non-success answer ends
+// that sweep and leaves the event queued, exactly as a transport failure does - so the mistake announces
+// itself only in the log, and there the two look nothing alike: a receiver that is down throws a
+// SocketException with a stack trace, while a path that does not match prints one info line ending in
+// "- 404". The failure worth knowing by sight is the quiet one, because it repeats every sweep forever.
 var pushEndpoint = builder.Configuration[PushEndpointKey]
     ?? throw new InvalidOperationException($"Configuration key '{PushEndpointKey}' is missing.");
 
