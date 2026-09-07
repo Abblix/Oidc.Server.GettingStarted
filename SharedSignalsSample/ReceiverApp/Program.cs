@@ -88,11 +88,12 @@ var app = builder.Build();
 // with the matching PushAuthorizationHeader on the transmitter's stream. What makes that line work is a
 // registered scheme that can authenticate - AddJwtBearer from the
 // Microsoft.AspNetCore.Authentication.JwtBearer package, which this project does not reference, or
-// AddAuthentication("name").AddScheme<...> for a credential of your own - with AddAuthorization beside it. Half measures start cleanly and answer
-// every delivery 500: register nothing and the host says it found authorization metadata with no
-// middleware to enforce it, register AddAuthentication() with no scheme and it says no default challenge
-// scheme was found. With a scheme in place an unauthenticated delivery is answered 401. Without any of
-// it the transmitter's signature is the only thing standing between the sink and whoever found the port.
+// AddAuthentication("name").AddScheme<...> for a credential of your own - with AddAuthorization beside
+// it. Half measures start cleanly and answer every delivery 500: register nothing and the host says it
+// found authorization metadata with no middleware to enforce it, register AddAuthentication() with no
+// scheme and it says no default challenge scheme was found. With both in place an unauthenticated
+// delivery is answered 401. Without any of it the transmitter's signature is the only thing standing
+// between the sink and whoever found the port.
 app.MapPushDeliveryEndpoint(pushEndpoint);
 
 // So the sample can be checked without reading logs.

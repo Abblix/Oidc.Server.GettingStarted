@@ -32,13 +32,17 @@ var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList
 // name as well says nothing about itself, and the position is the one thing a settings file always has.
 foreach (var (stream, position) in streams.Select((stream, position) => (stream, position)))
 {
-    // A stream missing everything is the library's diagnosis to make, and it names the member that is
-    // missing. Refusing it here first would report the absent push address as the whole story.
-    if (stream is { PushEndpointUrl: null, ReceiverId: not null })
+    // A stream that cannot identify itself is the library's diagnosis to make, and it names the member
+    // that is missing. So this mirrors the library's own test - both identifiers present and non-empty -
+    // rather than a null check, which would report an absent push address as the whole story about a
+    // stream whose name is absent too.
+    if (stream.PushEndpointUrl is null
+        && !string.IsNullOrEmpty(stream.ReceiverId)
+        && !string.IsNullOrEmpty(stream.StreamId))
     {
         throw new InvalidOperationException(
-            $"The declared stream at position {position} ('{stream.StreamId ?? stream.ReceiverId}') "
-            + "has no PushEndpointUrl, which makes it poll-delivered. This sample delivers by push only.");
+            $"The declared stream at position {position} ('{stream.StreamId}') has no PushEndpointUrl, "
+            + "which makes it poll-delivered. This sample delivers by push only.");
     }
 }
 
