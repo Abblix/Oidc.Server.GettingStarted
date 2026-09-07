@@ -66,6 +66,15 @@ builder.Services.AddSharedSignalsTransmitter(new SharedSignalsTransmitterOptions
     JwksUri = new Uri($"{issuer}/.well-known/jwks.json"),
     EventsSupported = [CaepEventTypes.SessionRevoked],
 
+    // Two members of the configuration document below would otherwise describe a transmitter this is
+    // not. Left unset, AuthorizationSchemes advertises OAuth 2.0 - a promise of a guarded management
+    // interface, on a host that authenticates nobody - and an empty list is how the library is told to
+    // advertise none. DefaultSubjectsMode decides what a stream created through the management API
+    // would cover; left at None it publishes "default_subjects": "NONE" while this transmitter's one
+    // declared stream covers all subjects, so the document contradicts the settings file.
+    AuthorizationSchemes = [],
+    DefaultSubjectsMode = StreamSubjectsMode.All,
+
     // A receiver names its own delivery endpoint, so by default the transmitter refuses to POST to an
     // address inside its own network: otherwise a stream pointed at a metadata service turns the
     // transmitter into the attacker's HTTP client. Both sides of this sample run on one machine, which is

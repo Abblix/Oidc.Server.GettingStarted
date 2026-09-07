@@ -66,12 +66,11 @@ A `404` in that same line means the transmitter reached the receiver and asked f
 
 Silence in both logs after 30 seconds means the sweep found nothing to deliver: the stream in `appsettings.json` does not cover the event, or the revoke call never reached the transmitter.
 
-### Two warnings on startup that do not apply here
+### A warning on startup that does not apply here
 
-The transmitter logs both of these before it is asked to do anything, and neither describes a problem in this sample. They are worth reading once, because telling an inapplicable warning from a real one is the skill this sample is for.
+The transmitter logs this before it is asked to do anything, and it does not describe a problem in this sample. It is worth reading once, because telling an inapplicable warning from a real one is the skill this sample is for.
 
 - `2011`, no scope is checked on the Stream Management API. That API is not mapped here at all, so there is no unguarded surface. In 2.4 the warning is raised where the transmitter advertises itself rather than where the management routes are mapped.
-- `2012`, new streams will cover no subject. It describes streams created through the management API, and this transmitter creates none: its one stream is declared in `appsettings.json` with `"SubjectsMode": "All"`. The fact behind the warning is real and on the wire - the configuration document does publish `"default_subjects": "NONE"` - and it costs nothing here only because the one receiver is configured rather than discovering.
 
 ### Running them both from one terminal
 
@@ -150,7 +149,7 @@ That refusal is the one that stops a genuine event addressed to somebody else. T
 
 The Stream Management API is not mapped. This transmitter's streams come from its configuration file, so nothing needs to create one over HTTP. That API is also the surface that has to be guarded by scope, since whoever can create a stream can ask to be told about your users. `MapSharedSignalsTransmitterEndpoints()` maps it together with the configuration document; the sample maps only the document.
 
-The document it does map advertises those management endpoints regardless, because in 2.4 it is built from the route prefix rather than from what was mapped. So a receiver that reads it finds addresses for creating a stream, reading its status, adding and removing subjects and requesting verification, and every one of them answers 404 here. It also publishes `authorization_schemes` naming OAuth, which announces a guarded management surface on a host that authenticates nobody. Nothing in this sample notices, for the same reason the `2012` warning above costs nothing here - but the configuration document is the single artefact of this pair that a stranger parses by machine, and what it says about this transmitter is not true.
+The document it does map advertises those management endpoints regardless, because in 2.4 it is built from the route prefix rather than from what was mapped. So a receiver that reads it finds addresses for creating a stream, reading its status, adding and removing subjects and requesting verification, and every one of them answers 404 here. Two other members of that document would say untrue things as well, and those the library does let a host correct: `AuthorizationSchemes = []` stops it advertising OAuth, which would otherwise announce a guarded management surface on a host that authenticates nobody, and `DefaultSubjectsMode` publishes what a created stream would cover. Both are set in `Program.cs`. The addresses are the part that cannot be corrected in 2.4, and the configuration document is the single artefact of this pair that a stranger parses by machine, so it is worth knowing exactly which of its statements this transmitter stands behind.
 
 Poll delivery is not shown. Push is the harder half to get right, because it is the one where the transmitter makes an outbound request to an address someone else chose.
 
