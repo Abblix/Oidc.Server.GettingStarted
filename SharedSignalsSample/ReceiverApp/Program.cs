@@ -85,8 +85,11 @@ var app = builder.Build();
 //
 //     app.MapPushDeliveryEndpoint(pushEndpoint).RequireAuthorization();
 //
-// with the matching PushAuthorizationHeader on the transmitter's stream. Without it the transmitter's
-// signature is the only thing standing between the sink and whoever found the port.
+// with the matching PushAuthorizationHeader on the transmitter's stream. That line needs a scheme behind
+// it - AddAuthentication and AddAuthorization at registration - or the host starts cleanly and answers
+// every delivery 500, saying it found authorization metadata and no middleware to enforce it. Without any
+// of it the transmitter's signature is the only thing standing between the sink and whoever found the
+// port.
 app.MapPushDeliveryEndpoint(pushEndpoint);
 
 // So the sample can be checked without reading logs.

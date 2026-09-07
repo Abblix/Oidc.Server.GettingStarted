@@ -8,7 +8,7 @@ The question a reader arrives with is "how do I know the event is genuine", and 
 
 - The transmitter side: a signing key published at `/.well-known/jwks.json`, `AddSecurityEvents` with the CAEP event registry, `AddSharedSignalsTransmitter`, streams declared in `appsettings.json` through `AddSharedSignalsConfiguredStreams`, and one `DispatchAsync` call at the place where the revocation actually happens.
 - The receiver side: `AddJwksKeyResolution` pointed at the transmitter as the trust root, `AddSharedSignalsReceiver` carrying the expected issuer and audience, `AddDistributedReplayCache` recording what was accepted, `MapPushDeliveryEndpoint` for the incoming POST, and a `SessionStore` implementing `ISecurityEventSink`, which is the only class in the sample the application itself had to write.
-- Why a transmitter refuses to deliver into its own network. A receiver names its own delivery endpoint, so a transmitter that POSTs wherever it is told is a server-side request forgery engine with the deployment's network position. Private hosts are refused by default; both halves of this sample run on `localhost`, which is precisely that case, so the operator permits those destinations explicitly through `AllowedReceiverAddresses`.
+- Why a transmitter refuses to deliver into its own network. A receiver names its own delivery endpoint, so a transmitter that POSTs wherever it is told is a server-side request forgery engine with the deployment's network position. Private hosts are refused by default; both halves of this sample run on `localhost`, which is precisely that case, so `AllowedReceiverAddresses` exempts them. Read that list for what it is: an exemption from the refusal rather than a filter over it, and here it is derived from the declared streams rather than named by hand.
 - What a key rollover looks like from the receiving side, including the window in which it goes wrong.
 
 ## Run it
@@ -71,7 +71,7 @@ Silence in both logs after 30 seconds means the sweep found nothing to deliver: 
 The transmitter logs both of these before it is asked to do anything, and neither describes a problem in this sample. They are worth reading once, because telling an inapplicable warning from a real one is the skill this sample is for.
 
 - `2011`, no scope is checked on the Stream Management API. That API is not mapped here at all, so there is no unguarded surface. In 2.4 the warning is raised where the transmitter advertises itself rather than where the management routes are mapped.
-- `2012`, new streams will cover no subject. It describes streams created through the management API, and this transmitter creates none: its one stream is declared in `appsettings.json` with `"SubjectsMode": "All"`.
+- `2012`, new streams will cover no subject. It describes streams created through the management API, and this transmitter creates none: its one stream is declared in `appsettings.json` with `"SubjectsMode": "All"`. The fact behind the warning is real and on the wire - the configuration document does publish `"default_subjects": "NONE"` - and it costs nothing here only because the one receiver is configured rather than discovering.
 
 ### Running them both from one terminal
 
@@ -143,6 +143,7 @@ That refusal is the one that stops a genuine event addressed to somebody else. T
 - `TransmitterApp/Program.cs`: the signing key and its `kid`, the JWK Set endpoint, `AddSecurityEvents`, `AddSharedSignalsTransmitter` with the allowed receiver addresses, and the revoke endpoint with its single `DispatchAsync`.
 - `TransmitterApp/appsettings.json`: the declared stream: which receiver, which events, which push endpoint.
 - `ReceiverApp/Program.cs`: key resolution, the validation options, the replay cache, and the push endpoint.
+- `ReceiverApp/appsettings.json`: the transmitter it trusts, the audience it expects, and the route it is pushed to.
 - `ReceiverApp/SessionStore.cs`: what a revoked session means to this application.
 
 ## What the sample deliberately leaves out

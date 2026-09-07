@@ -28,10 +28,10 @@ var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList
 // misspelled key binds to nothing - makes the stream poll-delivered instead, and this sample maps no poll
 // endpoint, so the transmitter would start cleanly, deliver nothing and log nothing. The section is read
 // as required above for that reason; the value this sample depends on earns the same treatment.
-foreach (var stream in streams.Where(stream => stream.PushEndpointUrl is null))
+if (streams.FirstOrDefault(stream => stream.PushEndpointUrl is null) is { } undeliverable)
 {
     throw new InvalidOperationException(
-        $"Stream '{stream.StreamId}' declares no PushEndpointUrl, which makes it poll-delivered. "
+        $"Stream '{undeliverable.StreamId}' declares no PushEndpointUrl, which makes it poll-delivered. "
         + "This sample delivers by push only.");
 }
 
@@ -100,10 +100,10 @@ app.MapSharedSignalsConfigurationDocument();
 // The one call a host makes when the thing actually happens. Everything else in this file is setup.
 //
 // Nothing guards it here, and that is a sample's licence rather than a pattern: anyone who can reach this
-// port can have this transmitter sign an event about any session and any user, and every receiver that
-// trusts the issuer will believe it, because a signature says who signed and not who asked. In a
-// deployment this call sits behind whatever already authorises "end this session" - the same check the
-// session's own owner passes - and this endpoint is not exposed at all.
+// port can have this transmitter sign an event about any session and any user, and every receiver these
+// streams are addressed to will believe it, because a signature says who signed and not who asked. In a
+// deployment there is no such endpoint: the dispatch below is called in-process, from wherever the
+// decision to end a session is actually taken and already authorised.
 app.MapPost("/sessions/{sessionId}/revoke", async (
     string sessionId,
     string user,
