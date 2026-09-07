@@ -24,27 +24,10 @@ var issuer = builder.Configuration[IssuerKey]
 var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList<ConfiguredStream>>()
     ?? throw new InvalidOperationException($"Configuration section '{StreamsSection}' is missing.");
 
-// The section being present is not the same as its values arriving. An absent PushEndpointUrl - a
-// misspelled key binds to nothing - makes the stream poll-delivered instead, and this sample maps no poll
-// endpoint, so the transmitter would start cleanly, deliver nothing and log nothing. The section is read
-// as required above for that reason; the value this sample depends on earns the same treatment.
-// Identified by position, because the binder does not honour "required" either: a stream that lost its
-// name as well says nothing about itself, and the position is the one thing a settings file always has.
-foreach (var (stream, position) in streams.Select((stream, position) => (stream, position)))
-{
-    // A stream that cannot identify itself is the library's diagnosis to make, and it names the member
-    // that is missing. So this mirrors the library's own test - both identifiers present and non-empty -
-    // rather than a null check, which would report an absent push address as the whole story about a
-    // stream whose name is absent too.
-    if (stream.PushEndpointUrl is null
-        && !string.IsNullOrEmpty(stream.ReceiverId)
-        && !string.IsNullOrEmpty(stream.StreamId))
-    {
-        throw new InvalidOperationException(
-            $"The declared stream at position {position} ('{stream.StreamId}') has no PushEndpointUrl, "
-            + "which makes it poll-delivered. This sample delivers by push only.");
-    }
-}
+// Nothing checks these declarations here on purpose. A misspelled PushEndpointUrl binds to nothing, which
+// would leave the stream poll-delivered with no poll endpoint mapped - and the library refuses that at
+// startup itself, naming both ways out: set PushEndpointUrl, or give the transmitter a poll address. A
+// check of our own would only arrive first with a narrower message.
 
 // A real transmitter takes its signing key from the same place the rest of the deployment does - a key
 // vault, a certificate store. This sample mints one per run, so restarting it is a key rollover as the
