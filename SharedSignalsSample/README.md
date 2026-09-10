@@ -160,4 +160,4 @@ An event that names only the user, rather than one of that user's sessions, is a
 ## The article behind this sample
 
 - A working Shared Signals transmitter and receiver for ASP.NET Core (https://www.abblix.com/en/docs/shared-signals-guide) - the walk through this sample, file by file.
-- How Identity Systems Deliver News That Cannot Wait (https://www.abblix.com/en/docs/shared-signals-framework) - the map: what SETs, SSF, CAEP and RISC are, and why they are separate layers.
+- How back-channel logout fits with the Shared Signals layers (https://www.abblix.com/en/docs/shared-signals-framework) - the map: what SETs, SSF, CAEP and RISC are, and why they are separate layers.
