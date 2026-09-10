@@ -159,5 +159,5 @@ An event that names only the user, rather than one of that user's sessions, is a
 
 ## The article behind this sample
 
-- Transmitting and Receiving Shared Signals Events in .NET: https://www.abblix.com/en/docs/shared-signals-guide - the walk through this sample, file by file.
-- How Identity Systems Deliver News That Cannot Wait: https://www.abblix.com/en/docs/shared-signals-framework - the map: what SETs, SSF, CAEP and RISC are, and why they are separate layers.
+- Shared Signals in ASP.NET Core: a working transmitter and receiver example (https://www.abblix.com/en/docs/shared-signals-guide) - the walk through this sample, file by file.
+- How Identity Systems Deliver News That Cannot Wait (https://www.abblix.com/en/docs/shared-signals-framework) - the map: what SETs, SSF, CAEP and RISC are, and why they are separate layers.
