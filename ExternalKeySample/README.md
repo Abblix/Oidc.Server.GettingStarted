@@ -169,7 +169,7 @@ container on the first run and an assignment on the container itself would grant
 | --- | --- |
 | `KeyCustodian` | Which custodian backs the keys: `Vault` or `Azure`. |
 | `UseKeysIn` | The posture: `Custodian` (the private half stays in the custodian) or `Process` (the server mints keys, seals them to the custodian, and signs locally). |
-| `Provider:Issuer` | The issuer identifier of the server's one tenant and the base URL the server runs on. |
+| `Provider:Issuer` | The issuer identifier of the server's one tenant and the base URL the server runs on. An address with no path: an issuer with a path needs `app.UseMultiTenancy()`, which this sample does not call, and the server refuses to start without it. |
 | `Provider:EncryptAccessToken` | `true` encrypts access tokens (JWE) to exercise the unwrap path; `false` leaves them a verifiable JWS. |
 | `Provider:Scope` | The scope the demo client may request. |
 | `Provider:ClientId` / `Provider:ClientSecretSha512Hash` | The `client_credentials` client's identity. The configuration the server loads carries the SHA-512 hash, base64-encoded, rather than the secret itself; the sample holds no default for it, so an absent value stops the server. The demo secret is `secret`, which is what the request examples above send. To use a different one, compute its hash with `printf %s 'your-secret' \| openssl dgst -sha512 -binary \| openssl base64 -A`. |
