@@ -366,7 +366,7 @@ static async Task<IResult> RegisterAsync(
             ["confirmPassword"] = ["The password and its confirmation do not match."],
         });
 
-#warning DEV shortcut: sign-up leaves the address unconfirmed, so email_verified is honestly false, yet still lets the account sign in. A real deployment emails a confirmation link and only trusts the address once the user proves control of the mailbox.
+#warning DEV shortcut: sign-up leaves the address unconfirmed, so email_verified is honestly false, yet still lets the account sign in. A real deployment emails a confirmation link and only trusts the address once the user proves control of the mailbox. See https://docs.abblix.com/docs/aspnet-identity-integration#wire-identity-into-the-container
     var user = new IdentityUser
     {
         UserName = request.Email,
