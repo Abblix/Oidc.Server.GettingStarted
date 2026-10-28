@@ -9,8 +9,8 @@
     <!-- The Vault and Azure custodians are the Abblix.Jwt.Vault / .Azure packages: an AddVaultCustodian or
          AddAzureCustodian call plus the key-placement call after it, and no custodian code in this sample.
          The Azure SDK arrives transitively through the .Azure package. -->
-    <PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="2.4.0" />
-    <PackageReference Include="Abblix.Jwt.Vault" Version="2.4.0" />
-    <PackageReference Include="Abblix.Jwt.Azure" Version="2.4.0" />
+    <PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="3.0.0" />
+    <PackageReference Include="Abblix.Jwt.Vault" Version="3.0.0" />
+    <PackageReference Include="Abblix.Jwt.Azure" Version="3.0.0" />
   </ItemGroup>
 </Project>

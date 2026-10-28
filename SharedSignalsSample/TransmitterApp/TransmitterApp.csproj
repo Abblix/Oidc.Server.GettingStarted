@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Abblix.JWT" Version="2.4.0" />
-    <PackageReference Include="Abblix.SharedSignals" Version="2.4.0" />
-    <PackageReference Include="Abblix.SharedSignals.MinimalAPI" Version="2.4.0" />
-    <PackageReference Include="Abblix.SecurityEvents.CAEP" Version="2.4.0" />
+    <PackageReference Include="Abblix.JWT" Version="3.0.0" />
+    <PackageReference Include="Abblix.SharedSignals" Version="3.0.0" />
+    <PackageReference Include="Abblix.SharedSignals.MinimalAPI" Version="3.0.0" />
+    <PackageReference Include="Abblix.SecurityEvents.CAEP" Version="3.0.0" />
   </ItemGroup>
 
 </Project>

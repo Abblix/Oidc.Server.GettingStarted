@@ -4,7 +4,7 @@
 
 ## What it demonstrates
 
-- Registering the server with `AddOidcServices`, whose delegate binds the `Oidc` configuration section, and mapping the protocol endpoints with `app.MapOidcEndpoints()`.
+- Registering the server with `AddOidcServices`, whose delegate declares one tenant and reads its clients from the `Oidc:Clients` configuration section, resolving each request to that tenant with `app.UseMultiTenancy()`, and mapping the protocol endpoints with `app.MapOidcEndpoints()`.
 - A login screen built from `MapGet("/Auth/Login")` and `MapPost`, resuming the paused authorization request through the `request_uri` the library hands it.
 - The same three interactive clients and the same `weather` resource as the MVC provider, so a client is moved between the two by pointing it at a different address. That is the whole move for signing users in; one that also calls ApiSample needs the change described under Running it.
 - A `client_credentials` client for headless checks, which the MVC provider does not carry.
@@ -22,15 +22,15 @@ The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory
 
 ## Layout
 
-- `Program.cs`: `AddOidcServices` with the configuration binding, the signing key, the `weather` resource, `MapOidcEndpoints()`, and the login endpoints.
-- `appsettings.json`: the client registrations, in the `Oidc` section.
+- `Program.cs`: `AddOidcServices` declaring the tenant - the issuer, the clients read from configuration, the signing key and the `weather` resource - then `UseMultiTenancy()`, `MapOidcEndpoints()`, and the login endpoints.
+- `appsettings.json`: the client registrations, in the `Oidc:Clients` section.
 - `TestUserStore.cs`: the in-memory user list, doubling as the `IUserInfoProvider`.
 
 ## How far the twin goes
 
-Both providers are built on the same release of the library, so their discovery documents agree on every capability - the same algorithms, grants, response modes and scopes - and they carry the same resource and the same three interactive clients; this one adds `console_client`. What differs is the address, because the two run on different ports: the issuer and the six endpoint URLs built on it. Read the two documents side by side if you ever doubt the rest - a difference outside those seven fields means either the projects have drifted onto different package versions, or their `Oidc` sections have, since some of those fields are settings rather than build-time facts. They are not the same host: it has no HTTPS redirection, no static files and no home page, because none of that is what it exists to show, and `GET /` answers 404.
+Both providers are built on the same release of the library, so their discovery documents agree on every capability - the same algorithms, grants, response modes and scopes - and they carry the same resource and the same three interactive clients; this one adds `console_client`. What differs is the address, because the two run on different ports: the issuer and the six endpoint URLs built on it. Read the two documents side by side if you ever doubt the rest - a difference outside those seven fields means either the projects have drifted onto different package versions, or their tenant declarations have, since some of those fields are settings rather than build-time facts. They are not the same host: it has no HTTPS redirection, no static files and no home page, because none of that is what it exists to show, and `GET /` answers 404.
 
-One setting is worth knowing because it reaches other projects. This provider pins `Issuer`, while the MVC one derives it from the request, so a token minted here names `https://localhost:5006` whatever address the request arrived on - and ApiSample, pinned to the other address, rejects it until its own settings move. The pin is not what makes the two discovery documents differ: remove it and this provider still says 5006, because that is the port it listens on. What the pin changes is that the answer stops following the request, which is what a host behind a proxy needs.
+One setting is worth knowing because it reaches other projects. Each provider declares its `Issuer`, and the server writes it into tokens and discovery exactly as configured, so a token minted here names `https://localhost:5006` - and ApiSample, pinned to the other address, rejects it until its own settings move. The issuer is also how a request finds its tenant: the server matches the request's host and path against it, so at `https://127.0.0.1:5006` the protocol endpoints answer 404. Scheme and port are not part of that match, because behind a proxy the request carries its own: the issuer stays as configured whatever port the request arrived on, while the endpoint URLs in the discovery document are built from the request.
 
 ## The guides behind this sample
 

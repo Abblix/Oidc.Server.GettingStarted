@@ -104,10 +104,8 @@ app.MapGet("/.well-known/jwks.json",
 // has to be guarded by scope, because whoever can create a stream can ask to be told about your users.
 // MapSharedSignalsTransmitterEndpoints() maps that API and this document together.
 //
-// Mapping the document alone is not the clean subset it looks like. The document is built from the
-// route prefix rather than from what was mapped, so it advertises the management addresses regardless: a
-// receiver that discovers this transmitter reads addresses for creating a stream, reading its status,
-// adding and removing subjects and requesting verification, and every one of them answers 404 here.
+// Mapping the document alone advertises only what answers here: no management address, and push as the only
+// delivery method, because each address in the document comes from what was mapped.
 app.MapSharedSignalsConfigurationDocument();
 
 // The one call a host makes when the thing actually happens. Everything else in this file is setup.

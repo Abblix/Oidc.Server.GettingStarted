@@ -4,7 +4,8 @@ OpenIDProviderApp is the OpenID Connect provider built step by step in the Getti
 
 ## What it demonstrates
 
-- Registering Abblix OIDC Server in an ASP.NET Core MVC app with `AddOidcServices`, which brings up the discovery, authorization, token, userinfo, and JWKS endpoints.
+- Registering Abblix OIDC Server in an ASP.NET Core MVC app with `AddOidcServices`, declaring the provider's one issuer as a tenant, resolving each request to it with `app.UseMultiTenancy()`, and mapping the discovery, authorization, token, userinfo, and JWKS endpoints with `app.MapOidcControllers()`.
+- Granting every client what it asks for with `AddConsentGrantedForEveryClient`, which fits here because all three clients are this repository's own samples.
 - A minimal user store (`TestUserStorage`) exposed to the library through `IUserInfoProvider`, turning a subject identifier into claims.
 - A login controller and a Bootstrap view under `/Auth/Login` that verify the password and hand the session to the library.
 - Client registrations in configuration for the sibling samples: `test_client` (TestClientApp), `bff_sample` (BffSample), and `blazor_sample` (BlazorSample), each using the authorization code flow with PKCE.
@@ -19,14 +20,16 @@ From the `Oidc.Server.GettingStarted` root:
 - `dotnet run --project OpenIDProviderApp` starts the provider on `https://localhost:5001`.
 - Open `https://localhost:5001/.well-known/openid-configuration` to see the discovery document, with the authorization, token, userinfo, and JWKS endpoints live.
 
+The server finds the tenant a request belongs to by matching the request's host against the issuer, so use `localhost` exactly: at `https://127.0.0.1:5001` the protocol endpoints answer 404.
+
 A provider is only half of a flow, so start a client next to it to sign in. TestClientApp (`https://localhost:5002`) is the simplest. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3` (a demo credential, visible in `Program.cs`).
 
 Node.js is required: the first build bundles Bootstrap for the login page with Vite.
 
 ## Layout
 
-- `Program.cs`: `AddOidcServices`, whose delegate binds the `Oidc` configuration section, plus the in-memory user and the `weather` resource.
-- `appsettings.json`: the client registrations, in the `Oidc` section.
+- `Program.cs`: `AddOidcServices`, whose delegate declares the tenant - the issuer `https://localhost:5001`, the login page, the signing key, the `weather` resource, and the clients read from configuration - plus the in-memory user and the request pipeline.
+- `appsettings.json`: the client registrations, in the `Oidc:Clients` section that `Program.cs` reads into the tenant.
 - `TestUserStorage.cs`: the in-memory user list, doubling as the `IUserInfoProvider`.
 - `Controllers/AuthController.cs` and `Views/Auth/Login.cshtml`: the login flow.
 - `ClientAssets/`: the Vite project that bundles Bootstrap into `wwwroot`.

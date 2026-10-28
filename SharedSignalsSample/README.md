@@ -15,7 +15,7 @@ The question a reader arrives with is "how do I know the event is genuine", and 
 
 Delivery here is a real HTTPS request from one process to another, so the pair needs slightly more than `dotnet run` twice. From the `Oidc.Server.GettingStarted` root:
 
-**Trust the development certificate.** Both directions are HTTPS between two local hosts: the transmitter POSTs to the receiver, and the receiver fetches the transmitter's key set. Each validates the other's certificate the way any client would.
+Trust the development certificate. Both directions are HTTPS between two local hosts: the transmitter POSTs to the receiver, and the receiver fetches the transmitter's key set. Each validates the other's certificate the way any client would.
 
 ```shell
 dotnet dev-certs https --trust
@@ -23,7 +23,7 @@ dotnet dev-certs https --trust
 
 The `curl -k` in the commands below is for your own probes only: it skips certificate validation because a shell reaching a local host is not what this sample is about. The two applications never do that to each other, and the delivery you are about to watch fails if either certificate does not check out.
 
-**Start the receiver.** Starting it first is the easier order to read, though not a requirement: a delivery that fails because nothing is listening leaves the event queued, and a later sweep takes it out again.
+Start the receiver. Starting it first is the easier order to read, though not a requirement: a delivery that fails because nothing is listening leaves the event queued, and a later sweep takes it out again.
 
 ```shell
 dotnet run --project SharedSignalsSample/ReceiverApp
@@ -31,7 +31,7 @@ dotnet run --project SharedSignalsSample/ReceiverApp
 
 Wait for `Now listening on: https://localhost:5102`.
 
-**Start the transmitter in a second terminal.**
+Start the transmitter in a second terminal.
 
 ```shell
 dotnet run --project SharedSignalsSample/TransmitterApp
@@ -39,7 +39,7 @@ dotnet run --project SharedSignalsSample/TransmitterApp
 
 It is ready when the log carries `Sweeping push streams every 00:00:30, ...` and `Now listening on: https://localhost:5101`.
 
-**Revoke a session and wait for the sweep.**
+Revoke a session and wait for the sweep.
 
 ```shell
 curl -k -X POST "https://localhost:5101/sessions/alice-laptop-session/revoke?user=alice@example.com"
@@ -65,12 +65,6 @@ The transmitter narrates the delivery, and its last line is the receiver's verdi
 A `404` in that same line means the transmitter reached the receiver and asked for a route it does not serve: `PushEndpoint` in the receiver's settings and `PushEndpointUrl` in the transmitter's stream have to name the same path.
 
 Silence in both logs after 30 seconds means the sweep found nothing to deliver: the stream in `appsettings.json` does not cover the event, or the revoke call never reached the transmitter.
-
-### A warning on startup that does not apply here
-
-The transmitter logs this before it is asked to do anything, and it does not describe a problem in this sample. It is worth reading once, because telling an inapplicable warning from a real one is the skill this sample is for.
-
-- `2011`, no scope is checked on the Stream Management API. That API is not mapped here at all, so there is no unguarded surface. The warning is raised where the transmitter advertises itself rather than where the management routes are mapped.
 
 ### Running them both from one terminal
 
@@ -149,7 +143,7 @@ That refusal is the one that stops a genuine event addressed to somebody else. T
 
 The Stream Management API is not mapped. This transmitter's streams come from its configuration file, so nothing needs to create one over HTTP. That API is also the surface that has to be guarded by scope, since whoever can create a stream can ask to be told about your users. `MapSharedSignalsTransmitterEndpoints()` maps it together with the configuration document; the sample maps only the document.
 
-The document it does map advertises those management endpoints regardless, because it is built from the route prefix rather than from what was mapped. So a receiver that reads it finds addresses for creating a stream, reading its status, adding and removing subjects and requesting verification, and every one of them answers 404 here. Two other members of that document would say untrue things as well, and those the library does let a host correct: `AuthorizationSchemes = []` stops it advertising OAuth, which would otherwise announce a guarded management surface on a host that authenticates nobody, and `DefaultSubjectsMode` publishes what a created stream would cover. Both are set in `Program.cs`. The addresses are the part that cannot be corrected, and the configuration document is the single artifact of this pair that a stranger parses by machine, so it is worth knowing exactly which of its statements this transmitter stands behind.
+The document it does map advertises only what this transmitter serves: with the management API left unmapped it carries no address for creating a stream, reading its status, adding and removing subjects or requesting verification, and it names push as the only delivery method. Two other members come from the options rather than from what is mapped, and left at their defaults they would say untrue things: `AuthorizationSchemes = []` stops the document advertising OAuth, which would otherwise announce a guarded management surface on a host that authenticates nobody, and `DefaultSubjectsMode` publishes what a created stream would cover. Both are set in `Program.cs`. The configuration document is the single artifact of this pair that a stranger parses by machine, so it is worth knowing exactly which of its statements this transmitter stands behind.
 
 Poll delivery is not shown. Push is the harder half to get right, because it is the one where the transmitter makes an outbound request to an address someone else chose.
 

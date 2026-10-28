@@ -1,34 +1,38 @@
 # OpenID Provider with ASP.NET Core Identity: the production-shaped step
 
-AspNetIdentitySample is OpenIDProviderApp taken one step toward production. It keeps the same protocol surface from Abblix OIDC Server but replaces every in-memory shortcut with a durable equivalent: users and credentials live in ASP.NET Core Identity on EF Core with SQLite, clients live in a database-backed store, and the signing key is persisted (encrypted) so a restart does not invalidate tokens already issued. Instead of a seeded demo account, it ships a self-service sign-up form, so the first thing a fresh run asks for is registration.
+AspNetIdentitySample is OpenIDProviderApp taken one step toward production. It keeps the same protocol surface from Abblix OIDC Server but replaces every in-memory shortcut with a durable equivalent: users and credentials live in ASP.NET Core Identity on EF Core with SQLite, client registrations live in a database-backed store, and the signing key is persisted (encrypted) so a restart does not invalidate tokens already issued. Instead of a seeded demo account, it ships a self-service sign-up form, so the first thing a fresh run asks for is registration.
 
 ## What it demonstrates
 
 - The two seams where the library meets an external user system: an `IUserInfoProvider` adapter over Identity's `UserManager` (`IdentityUserInfoProvider`) that turns a subject into claims, and a login flow where Identity verifies the password (`CheckPasswordSignInAsync`, with hashing, failed-attempt counting, and lockout) while the library's `IAuthSessionService` issues the OpenID Connect session cookie.
 - Self-service registration: the sign-up form posts to `POST /api/auth/register`, which creates the account through `UserManager` (salted PBKDF2 hash, with the unique-email and password policy enforced), signs the user in, and returns the URL that resumes the OIDC flow. There is no seeded user.
 - A React auth UI decoupled from the server's transport: the SignIn and SignUp screens are a React and Tailwind SPA that talks to the server only through the JSON auth API. The client's TypeScript types are generated from the server's OpenAPI document, so the two cannot drift. This sample wires the OIDC endpoints through the Minimal API adapter, `Abblix.OIDC.Server.MinimalAPI` (`AddOidcServices` and `app.MapOidcEndpoints()`); the same React UI and JSON auth API would drop onto an MVC host unchanged, because they depend on the seam, not the transport.
-- A durable client store in the database, so clients can be added or changed without a redeploy, and a client that registers itself through Dynamic Client Registration survives a restart.
+- A durable client store in the database (`DurableClientStore`, an `ITenantClientRegistrationStore`), so clients can be added or changed without a redeploy, and once Dynamic Client Registration is enabled, a client that registers itself survives a restart. The server's own client store still serves any client the tenant declares in its definition first, and keeps everything else in this store.
 - Signing keys persisted to SQLite, encrypted with Data Protection, so tokens issued before a restart keep validating afterwards.
 - Security-stamp validation: the stamp snapshotted at login is compared on every request, so a password change or an explicit stamp update ends existing sessions.
 
-The sample is honestly labelled. Each development-grade default (an unconfirmed email on sign-up, an unencrypted local Data Protection key ring, client secrets in the database, `EnsureCreated` instead of EF migrations) carries a compile-time `#warning` that names the production choice and links the article explaining it.
+The provider serves one tenant, `main`, whose issuer is `https://localhost:5001`. Every row in the OIDC store carries the tenant's id and generation, so the same tables would keep several tenants' keys and clients apart.
+
+Its development-grade defaults (an unconfirmed email on sign-up, an unencrypted local Data Protection key ring, signing keys and client secrets in the database) each carry a compile-time `#warning` that names the production choice and links the article explaining it. `EnsureCreated` instead of EF migrations is called out in a comment beside it.
 
 ## Running it
 
-From the `Oidc.Server.GettingStarted` root:
+Requires the .NET 11 SDK and Node.js. From the `Oidc.Server.GettingStarted` root:
 
-- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It stands in for OpenIDProviderApp on the same port and seeds the same three clients, so TestClientApp, BffSample and BlazorSample all point at it unchanged.
+- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It stands in for OpenIDProviderApp on the same port and seeds the same three clients, so TestClientApp, BffSample and BlazorSample all point at it unchanged. Open it as `localhost`: the server answers only at its issuer's host, so `https://127.0.0.1:5001` reaches no tenant and its OpenID endpoints answer 404.
 - Start a client next to it (TestClientApp on `https://localhost:5002`) and open it: its home page requires authentication, so it sends you straight to the provider. Create an account there with Create one on the sign-in screen, and you return to the client already signed in.
 
-On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the three clients. Delete the `.db` files to start from an empty store. Node.js is required: the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.
+On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the three clients. Delete the `.db` files to start from an empty store. Node.js is required because the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.
+
+If you ran a 2.x version of this sample before, delete `oidc.db` (with its `-shm` and `-wal` files) before the first run: the store's tables now carry the tenant's id and generation, `EnsureCreated` does not alter tables that already exist, and the old file stops the provider at startup with `no such column`. The next run creates a new signing key, so tokens issued by the old version stop validating. `users.db` is unchanged and can stay.
 
 ## Layout
 
-- `Program.cs`: Identity + EF wiring, `AddOidcServices` with `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter.
+- `Program.cs`: Identity + EF wiring, the tenant definition, `AddConsentGrantedForEveryClient` (every client here is the provider's own), `AddOidcServices` with `app.UseMultiTenancy()` and `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter.
 - `Models/AuthContracts.cs`: the request and response contracts for the JSON auth API.
 - `ClientApp/`: the React, TypeScript, Vite, and Tailwind auth SPA. `npm run gen:api` regenerates `src/api/schema.d.ts` from the server's OpenAPI document (refresh the snapshot with `curl -k https://localhost:5001/openapi/v1.json -o ClientApp/openapi.json` while the provider runs).
 - `IdentityUserInfoProvider.cs`: the subject-to-claims adapter over Identity.
-- `OidcStore/`: the SQLite-backed signing-key provider (`DatabaseKeysProvider`), the durable client store (`DurableClientStore`), and their `DbContext`.
+- `OidcStore/`: the SQLite-backed signing-key provider (`DatabaseKeysProvider`), the client registration store (`DurableClientStore`), and their `DbContext`.
 - `AppDbContext.cs`: the Identity `DbContext`.
 
 ## The guides behind this sample
