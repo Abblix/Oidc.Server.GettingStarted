@@ -1,7 +1,9 @@
 using System.Net;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.AspNetCore.MultiTenancy;
+using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
+using Abblix.Oidc.Server.Common.Interfaces;
 using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
@@ -9,9 +11,11 @@ using Abblix.Oidc.Server.Features.RandomGenerators;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.MinimalApi;
+using Abblix.Oidc.Server.Model;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using OpenIDProviderApp.MinimalApi;
+using UriBuilder = Abblix.Utils.UriBuilder;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -83,6 +87,7 @@ app.MapPost("/Auth/Login", async (
         [FromForm] string password,
         [FromForm] string requestUri,
         IAuthSessionService authService,
+        IOidcEndpointResolver endpointResolver,
         ISessionIdGenerator sessionIdGenerator,
         TimeProvider timeProvider,
         TestUserStore userStore) =>
@@ -101,8 +106,12 @@ app.MapPost("/Auth/Login", async (
         // Sign in the user using the authentication service
         await authService.SignInAsync(authSession);
 
-        // Redirect the user to the authorization endpoint URL, recovering the OIDC flow
-        return Results.Redirect($"/connect/authorize?request_uri={Uri.EscapeDataString(requestUri)}");
+        // Redirect the user to the authorization endpoint URL, recovering the OIDC flow. The resolver answers the
+        // address as mapped, a route prefix or a path base included; every endpoint is enabled here, as the
+        // defaults leave them, so it always has an address to return.
+        var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
+            { Query = { [AuthorizationRequest.Parameters.RequestUri] = requestUri } };
+        return Results.Redirect(authorizeUrl);
     })
     // The form carries a single-use request_uri that binds the post back to the pending
     // authorization request, so the standard antiforgery token adds nothing here
