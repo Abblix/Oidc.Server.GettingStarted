@@ -1,6 +1,5 @@
 using System.Net;
 using Abblix.Jwt;
-using Abblix.Oidc.Server.AspNetCore.MultiTenancy;
 using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
@@ -38,7 +37,7 @@ builder.Services.AddConsentGrantedForEveryClient();
 builder.Services.AddOidcServices(options => options.Tenants.Add(new TenantDefinition
 {
     Id = "main",
-    // The address the app is served on: at any other host or path, the OpenID endpoints answer 404
+    // The address the app is served on, written into every token it issues
     Issuer = new Uri("https://localhost:5006"),
 
     // Client registrations are loaded from the Oidc section of appsettings.json. Only the clients are read from
@@ -70,8 +69,7 @@ builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
-// Resolves each request to its tenant, then routes it: it takes the place of UseRouting
-app.UseMultiTenancy();
+app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 

@@ -4,7 +4,7 @@ OpenIDProviderApp is the OpenID Connect provider built step by step in the Getti
 
 ## What it demonstrates
 
-- Registering Abblix OIDC Server in an ASP.NET Core MVC app with `AddOidcServices`, declaring the provider's one issuer as a tenant, resolving each request to it with `app.UseMultiTenancy()`, and mapping the discovery, authorization, token, userinfo, and JWKS endpoints with `app.MapOidcControllers()`.
+- Registering Abblix OIDC Server in an ASP.NET Core MVC app with `AddOidcServices`, declaring the provider's one issuer as a tenant, and mapping the discovery, authorization, token, userinfo, and JWKS endpoints with `app.MapOidcControllers()`.
 - Granting every client what it asks for with `AddConsentGrantedForEveryClient`, which fits here because all three clients are this repository's own samples.
 - A minimal user store (`TestUserStorage`) exposed to the library through `IUserInfoProvider`, turning a subject identifier into claims.
 - A login controller and a Bootstrap view under `/Auth/Login` that verify the password and hand the session to the library.
@@ -19,8 +19,6 @@ From the `Oidc.Server.GettingStarted` root:
 
 - `dotnet run --project OpenIDProviderApp` starts the provider on `https://localhost:5001`.
 - Open `https://localhost:5001/.well-known/openid-configuration` to see the discovery document, with the authorization, token, userinfo, and JWKS endpoints live.
-
-The server finds the tenant a request belongs to by matching the request's host against the issuer, so use `localhost` exactly: at `https://127.0.0.1:5001` the protocol endpoints answer 404.
 
 A provider is only half of a flow, so start a client next to it to sign in. TestClientApp (`https://localhost:5002`) is the simplest. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3` (a demo credential, visible in `Program.cs`).
 

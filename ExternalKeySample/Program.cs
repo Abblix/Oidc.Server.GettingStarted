@@ -2,7 +2,6 @@
 using Abblix.Jwt.ExternalKeys;
 using Abblix.Jwt.Vault;
 using Abblix.Oidc;
-using Abblix.Oidc.Server.AspNetCore.MultiTenancy;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Features;
 using Abblix.Oidc.Server.Features.ClientInformation;
@@ -164,12 +163,10 @@ switch (placement)
 
 var app = builder.Build();
 
-// Resolves each request to the tenant whose issuer its address names, then routes it, so it takes the place of
-// UseRouting. The server does not start without it.
-app.UseMultiTenancy();
+app.UseRouting();
 
 // The OIDC endpoints carry CORS metadata (discovery and JWKS are cross-origin by design), so the CORS middleware
-// must be present even with no custom policy, and after UseMultiTenancy, where routing runs.
+// must be present even with no custom policy, and after UseRouting.
 app.UseCors();
 
 // The OIDC protocol endpoints: discovery, JWKS, token, introspection, ...

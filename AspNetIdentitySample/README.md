@@ -19,7 +19,7 @@ Its development-grade defaults (an unconfirmed email on sign-up, an unencrypted 
 
 Requires the .NET 11 SDK and Node.js. From the `Oidc.Server.GettingStarted` root:
 
-- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It stands in for OpenIDProviderApp on the same port and seeds the same three clients, so TestClientApp, BffSample and BlazorSample all point at it unchanged. Open it as `localhost`: the server answers only at its issuer's host, so `https://127.0.0.1:5001` reaches no tenant and its OpenID endpoints answer 404.
+- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It stands in for OpenIDProviderApp on the same port and seeds the same three clients, so TestClientApp, BffSample and BlazorSample all point at it unchanged.
 - Start a client next to it (TestClientApp on `https://localhost:5002`) and open it: its home page requires authentication, so it sends you straight to the provider. Create an account there with Create one on the sign-in screen, and you return to the client already signed in.
 
 On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the three clients. Delete the `.db` files to start from an empty store. Node.js is required because the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.
@@ -28,7 +28,7 @@ If you ran a 2.x version of this sample before, delete `oidc.db` (with its `-shm
 
 ## Layout
 
-- `Program.cs`: Identity + EF wiring, the tenant definition, `AddConsentGrantedForEveryClient` (every client here is the provider's own), `AddOidcServices` with `app.UseMultiTenancy()` and `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter.
+- `Program.cs`: Identity + EF wiring, the tenant definition, `AddConsentGrantedForEveryClient` (every client here is the provider's own), `AddOidcServices` with `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter.
 - `Models/AuthContracts.cs`: the request and response contracts for the JSON auth API.
 - `ClientApp/`: the React, TypeScript, Vite, and Tailwind auth SPA. `npm run gen:api` regenerates `src/api/schema.d.ts` from the server's OpenAPI document (refresh the snapshot with `curl -k https://localhost:5001/openapi/v1.json -o ClientApp/openapi.json` while the provider runs).
 - `IdentityUserInfoProvider.cs`: the subject-to-claims adapter over Identity.
