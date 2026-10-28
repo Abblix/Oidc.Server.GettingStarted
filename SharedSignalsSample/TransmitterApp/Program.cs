@@ -85,7 +85,7 @@ builder.Services.AddSharedSignalsTransmitter(new SharedSignalsTransmitterOptions
     // stream the settings file names, which is right for a sample whose stream set is the settings file
     // and wrong wherever streams can be created through the management API - there an operator names the
     // origins it trusts as a separate setting, so that declaring a stream is not the same act as
-    // authorising its destination.
+    // authorizing its destination.
     AllowedReceiverAddresses = [.. streams.Select(stream => stream.PushEndpointUrl).OfType<Uri>()],
 });
 
@@ -104,19 +104,17 @@ app.MapGet("/.well-known/jwks.json",
 // has to be guarded by scope, because whoever can create a stream can ask to be told about your users.
 // MapSharedSignalsTransmitterEndpoints() maps that API and this document together.
 //
-// Mapping the document alone is not the clean subset it looks like. The document is built from the
-// route prefix rather than from what was mapped, so it advertises the management addresses regardless: a
-// receiver that discovers this transmitter reads addresses for creating a stream, reading its status,
-// adding and removing subjects and requesting verification, and every one of them answers 404 here.
+// Mapping the document alone advertises only what answers here: no management address, and push as the only
+// delivery method, because each address in the document comes from what was mapped.
 app.MapSharedSignalsConfigurationDocument();
 
 // The one call a host makes when the thing actually happens. Everything else in this file is setup.
 //
-// Nothing guards it here, and that is a sample's licence rather than a pattern: anyone who can reach this
+// Nothing guards it here, and that is a sample's license rather than a pattern: anyone who can reach this
 // port can have this transmitter sign an event about any session and any user, and every receiver these
 // streams are addressed to will believe it, because a signature says who signed and not who asked. In a
 // deployment there is no such endpoint: the dispatch below is called in-process, from wherever the
-// decision to end a session is actually taken and already authorised.
+// decision to end a session is actually taken and already authorized.
 app.MapPost("/sessions/{sessionId}/revoke", async (
     string sessionId,
     string user,

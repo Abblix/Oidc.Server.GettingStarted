@@ -1,13 +1,20 @@
 using System.Net;
 using Abblix.Jwt;
+using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
+using Abblix.Oidc.Server.Common.Interfaces;
+using Abblix.Oidc.Server.Features.ClientInformation;
+using Abblix.Oidc.Server.Features.Consents;
+using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.RandomGenerators;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.MinimalApi;
+using Abblix.Oidc.Server.Model;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using OpenIDProviderApp.MinimalApi;
+using UriBuilder = Abblix.Utils.UriBuilder;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,26 +28,35 @@ var userStore = new TestUserStore(
 builder.Services.AddSingleton(userStore);
 builder.Services.AddSingleton<IUserInfoProvider>(userStore);
 
-// AddOidcServices = the protocol core plus the Minimal API transport adapter, the counterpart
-// of the MVC integration's own AddOidcServices.
-builder.Services.AddOidcServices(options =>
-{
-    // Client registrations are loaded from the Oidc section of appsettings.json
-    builder.Configuration.Bind("Oidc", options);
+// Grants every client everything it asks for, which suits only clients of your own;
+// to ask the end user for consent, register your own IUserConsentsProvider instead
+builder.Services.AddConsentGrantedForEveryClient();
 
-    options.Issuer = "https://localhost:5006";
-    options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);
+// AddOidcServices = the protocol core plus the Minimal API transport adapter, the counterpart
+// of the MVC integration's own AddOidcServices. It serves one issuer, declared as one tenant.
+builder.Services.AddOidcServices(options => options.Tenants.Add(new TenantDefinition
+{
+    Id = "main",
+    // The address the app is served on, written into every token it issues
+    Issuer = new Uri("https://localhost:5006"),
+
+    // Client registrations are loaded from the Oidc section of appsettings.json. Only the clients are read from
+    // there: the tenant itself is declared here, because its signing key is generated at startup, so binding
+    // Oidc:Tenants from configuration as well would add a second tenant rather than fill in this one.
+    Clients = builder.Configuration.GetSection("Oidc:Clients").Get<ClientInfo[]>() ?? [],
+
+    LoginUri = new Uri("/Auth/Login", UriKind.Relative),
 
     // The same resource the MVC provider declares, so a client registered against both - BffSample
     // asks for the weather scope - is served identically whichever one it points at.
-    options.Resources =
+    Resources =
     [
         new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
-    ];
+    ],
 
     // The following line generates a new key for token signing. Replace it if you want to use your own keys.
-    options.SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)];
-});
+    SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
+}));
 
 builder.Services.AddAuthentication().AddCookie();
 
@@ -57,7 +73,7 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 
-// The Minimal API counterpart of MVC's app.MapControllers()
+// The Minimal API counterpart of the MVC provider's app.MapOidcControllers()
 app.MapOidcEndpoints();
 
 // The login UI: the Minimal API counterpart of the MVC provider's AuthController
@@ -69,6 +85,7 @@ app.MapPost("/Auth/Login", async (
         [FromForm] string password,
         [FromForm] string requestUri,
         IAuthSessionService authService,
+        IOidcEndpointResolver endpointResolver,
         ISessionIdGenerator sessionIdGenerator,
         TimeProvider timeProvider,
         TestUserStore userStore) =>
@@ -87,8 +104,12 @@ app.MapPost("/Auth/Login", async (
         // Sign in the user using the authentication service
         await authService.SignInAsync(authSession);
 
-        // Redirect the user to the authorization endpoint URL, recovering the OIDC flow
-        return Results.Redirect($"/connect/authorize?request_uri={Uri.EscapeDataString(requestUri)}");
+        // Redirect the user to the authorization endpoint URL, recovering the OIDC flow. The resolver answers the
+        // address as mapped, a route prefix or a path base included; every endpoint is enabled here, as the
+        // defaults leave them, so it always has an address to return.
+        var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
+            { Query = { [AuthorizationRequest.Parameters.RequestUri] = requestUri } };
+        return Results.Redirect(authorizeUrl);
     })
     // The form carries a single-use request_uri that binds the post back to the pending
     // authorization request, so the standard antiforgery token adds nothing here

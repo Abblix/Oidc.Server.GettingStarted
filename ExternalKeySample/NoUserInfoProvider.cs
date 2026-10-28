@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 
@@ -11,6 +12,7 @@ namespace ExternalKeySample;
 /// </summary>
 public sealed class NoUserInfoProvider : IUserInfoProvider
 {
-    public Task<JsonObject?> GetUserInfoAsync(AuthSession authSession, IEnumerable<string> requestedClaims)
+    public Task<JsonObject?> GetUserInfoAsync(
+        TenantDefinition tenant, AuthSession authSession, IEnumerable<string> requestedClaims)
         => Task.FromResult<JsonObject?>(null);
 }

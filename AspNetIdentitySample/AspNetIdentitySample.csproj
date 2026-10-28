@@ -7,7 +7,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientAppRoot)node_modules\**;$(ClientAppRoot)dist\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
-	<PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="2.4.0" />
+	<PackageReference Include="Abblix.Oidc.Server.MinimalApi" Version="3.0.0" />
 	<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
 	<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
 	<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />

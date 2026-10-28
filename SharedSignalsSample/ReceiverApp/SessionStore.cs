@@ -36,7 +36,7 @@ public sealed class SessionStore(ILogger<SessionStore> logger) : ISecurityEventS
         }
 
         // Returning null accepts the delivery. A DeliveryError answers 400 instead, and the code decides
-        // the event's fate: everything except access_denied and authentication_failed - an unrecognised
+        // the event's fate: everything except access_denied and authentication_failed - an unrecognized
         // code included - is acknowledged out of the transmitter's queue and never retried. So a sink that
         // merely cannot act right now must not answer with one; failing the request leaves the event
         // queued for the next pass.

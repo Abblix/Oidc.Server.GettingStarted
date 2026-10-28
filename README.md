@@ -1,6 +1,6 @@
 <a name="top"></a>
 [![Getting Started with OIDC Server](https://resources.abblix.com/imgs/jpg/getting-started-github-banner.jpg)](https://github.com/Abblix/Oidc.Server.GettingStarted)
-[![.NET](https://img.shields.io/badge/.NET-8.0%2C%209.0%2C%2010.0-512BD4)](https://docs.abblix.com/docs/technical-requirements)
+[![.NET](https://img.shields.io/badge/.NET-11.0-512BD4)](https://docs.abblix.com/docs/technical-requirements)
 [![language](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/ru-ru/dotnet/csharp/tour-of-csharp/overview)
 [![OS](https://img.shields.io/badge/OS-linux%2C%20windows%2C%20macOS-0078D4)](https://docs.abblix.com/docs/technical-requirements)
 [![CPU](https://img.shields.io/badge/CPU-x86%2C%20x64%2C%20ARM%2C%20ARM64-FF8C00)](https://docs.abblix.com/docs/technical-requirements)
@@ -33,39 +33,42 @@ Before diving into this solution, make sure to review either the [Getting Starte
 > This codebase is intended primarily for self-checks. We strongly recommend building the entire project from scratch to significantly enhance your understanding of these technologies.
 ### Included projects
 
-- **OpenIDProviderApp**  
+- OpenIDProviderApp  
 The `OpenIDProviderApp` serves as the OpenID Connect provider within this project. Its primary responsibilities include authenticating users, managing their sessions, and issuing tokens in accordance with the OpenID Connect protocol. Specifically, it validates client requests and provides access tokens that authorize user resource access, as well as ID tokens that verify user identity. The application employs the Abblix OIDC Server solution to function effectively as an OpenID Connect protocol server. Additionally, the app is designed to handle various OAuth 2.0 flows, ensuring secure and compliant user authentication and authorization processes in modern web applications.
 
-- **AspNetIdentitySample**  
+- AspNetIdentitySample  
 The `AspNetIdentitySample` is the `OpenIDProviderApp` taken one step toward production: it replaces the in-memory demo user list with a real ASP.NET Core Identity user store backed by Entity Framework Core and SQLite. It demonstrates the two seams where Abblix OIDC Server meets an external user system. First, an `IUserInfoProvider` adapter over Identity's `UserManager` turns a subject identifier into claims. Second, a login flow that keeps responsibilities cleanly split: Identity verifies the password through `CheckPasswordSignInAsync` (password hashing, failed-attempt counting, and lockout), while the library's `IAuthSessionService` issues the OpenID Connect session cookie. The result is a provider whose users, credentials, and profile data live in a database rather than in code, while the protocol handling stays entirely with the library. Its sign-in and sign-up screens are a React and Tailwind SPA that talks to a JSON auth API, with the client's types generated from the server's OpenAPI document, so the same UI works over an MVC or a Minimal API host unchanged.
 
-- **OpenIDProviderApp.MinimalApi**  
+- OpenIDProviderApp.MinimalApi  
 The `OpenIDProviderApp.MinimalApi` (port 5006) is the Minimal API counterpart of the `OpenIDProviderApp`: the same Abblix OIDC Server protocol core hosted through the `Abblix.Oidc.Server.MinimalApi` adapter instead of MVC. It configures a signing key in code, reads its clients from the `Oidc` section of `appsettings.json` like the MVC provider does, and maps the OIDC endpoints with `MapOidcEndpoints()`, making it a compact reference for hosting the server without MVC. It carries the same three interactive clients and the same `weather` resource as the MVC provider, so the two publish the same capabilities and a client moves between them by changing `Authority`. The addresses in the two discovery documents differ, because the two listen on different ports, and a client that also calls ApiSample needs the API's pinned issuer moved as well. It adds a `client_credentials` client for headless checks, which the MVC provider does not carry. Its own README covers running it.
 
-- **TestClientApp**  
+- TestClientApp  
 The `TestClientApp` functions as the Relying Party, acting as a client that depends on the `OpenIDProviderApp` (or its Minimal API twin, `OpenIDProviderApp.MinimalApi`) for user authentication. It demonstrates the interaction between a client application and an OpenID Connect provider, showing how users are authenticated and tokens are obtained. This scenario offers practical insight into integrating OpenID Connect authentication into client applications. The `TestClientApp` uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` to operate as an OpenID Connect client, making it a practical example of real-world authentication in .NET environments.
 
-- **BffSample**  
+- BffSample  
 The `BffSample` implements the Backend-For-Frontend (BFF) architectural pattern for a React Single Page Application (built with Vite) served by a .NET backend. The backend is a confidential OpenID Connect client: it runs the authorization code flow with PKCE, keeps the resulting tokens in an encrypted, HttpOnly session cookie, and never exposes them to browser JavaScript. Requests from the SPA to protected APIs are proxied through the backend, which strips the session cookie and attaches the access token, so the browser holds a session reference rather than a bearer token. The sample follows the IETF `draft-ietf-oauth-browser-based-apps` BFF profile and pairs with `ApiSample` as the protected resource. It is the runnable counterpart to the [Securing a React SPA with the BFF Pattern](https://docs.abblix.com/docs/react-spa-bff-guide) guide.
 
-- **BlazorSample**  
+- BlazorSample  
 The `BlazorSample` is a Blazor Web App (interactive Server render mode) acting as an OpenID Connect client of the `OpenIDProviderApp` (or its Minimal API twin, `OpenIDProviderApp.MinimalApi`). It shows the pattern that keeps Blazor and OIDC working together: the pages are rendered by Blazor, but sign-in and sign-out run on plain HTTP endpoints rather than inside an interactive circuit, because writing the authentication cookie and issuing the OIDC redirect both need the HTTP response. The sample uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` with cookie sessions, the authorization code flow and PKCE.
 
-- **SharedSignalsSample**  
-The `SharedSignalsSample` is a pair of applications: a transmitter that revokes a user's session and announces it, and a receiver that hears the announcement and closes its own. Between them runs a real push delivery of a signed Security Event Token over HTTPS, verified against a JWK Set the receiver fetches for itself. The second host is what the sample is paying for: the question a reader arrives with is how to tell a genuine event from a forged one, and the answer - a signature, a published key set, an expected issuer and an expected audience - has nothing to check in a single process. It shows the transmitter side (`AddSecurityEvents`, `AddSharedSignalsTransmitter`, streams declared in configuration, and one `DispatchAsync` where the revocation happens) and the receiver side (`AddJwksKeyResolution` as the trust root, the validation options, replay suppression, and an `ISecurityEventSink` that is the only class the application itself writes). It also shows two things that only appear with two hosts: why a transmitter refuses by default to deliver into its own network, and what a key rollover looks like from the receiving side. It is the runnable counterpart to the [Transmitting and Receiving Shared Signals Events in .NET](https://www.abblix.com/en/docs/shared-signals-guide) guide.
+- SharedSignalsSample  
+The `SharedSignalsSample` is a pair of applications: a transmitter that revokes a user's session and announces it, and a receiver that hears the announcement and closes its own. Between them runs a real push delivery of a signed Security Event Token over HTTPS, verified against a JWK Set the receiver fetches for itself. The second host is what the sample is paying for: the question a reader arrives with is how to tell a genuine event from a forged one, and the answer - a signature, a published key set, an expected issuer and an expected audience - has nothing to check in a single process. It shows the transmitter side (`AddSecurityEvents`, `AddSharedSignalsTransmitter`, streams declared in configuration, and one `DispatchAsync` where the revocation happens) and the receiver side (`AddJwksKeyResolution` as the trust root, the validation options, replay suppression, and an `ISecurityEventSink` that is the only class the application itself writes). It also shows two things that only appear with two hosts: why a transmitter refuses by default to deliver into its own network, and what a key rollover looks like from the receiving side. It is the runnable counterpart to [a working Shared Signals transmitter and receiver for ASP.NET Core](https://www.abblix.com/en/docs/shared-signals-guide).
 
-- **ApiSample**  
+- ApiSample  
 The `ApiSample` demonstrates how to build a secure backend API that works in conjunction with an OpenID Connect provider to authenticate and authorize client requests. This sample illustrates the integration of security protocols like OAuth 2.0 and OpenID Connect into API development, ensuring that only authenticated and authorized users can access protected resources. The `ApiSample` serves as a practical guide for implementing secure APIs that comply with modern authentication standards, providing a robust foundation for securing backend services in a distributed web application architecture.
+
+- ExternalKeySample  
+The `ExternalKeySample` is an OpenID Connect provider whose signing and encryption keys are held in an external key custodian, a HashiCorp Vault or OpenBao Transit engine started in Docker or an Azure Key Vault, instead of in the application. It issues `client_credentials` tokens to one service client, publishes only the public halves of its keys, and, with encryption turned on, has the custodian open its encrypted tokens when they are introspected. One setting switches between the two placements the library offers: keys that never leave the custodian, where every signature is a call to it, and keys the server mints itself and keeps sealed to a custodian key, where signing is local. Sealing the vault shows the trade: with keys held in the custodian, signing stops at once; with minted keys, a running server keeps signing and a fresh one cannot start. Its own README covers running it against either custodian.
 
 ## 🛡️ About Abblix OIDC Server
 
-**Abblix OIDC Server** is a .NET library designed to provide comprehensive support for OAuth2 and OpenID Connect on the server side. It adheres to high standards of flexibility, reusability, and reliability, utilizing well-known software design patterns, including modular and hexagonal architectures. These patterns ensure the following benefits:
+Abblix OIDC Server is a .NET library designed to provide comprehensive support for OAuth2 and OpenID Connect on the server side. It adheres to high standards of flexibility, reusability, and reliability, utilizing well-known software design patterns, including modular and hexagonal architectures. These patterns ensure the following benefits:
 
-- **Modularity**: Different parts of the library can function independently, enhancing the library's modularity and allowing for easier maintenance and updates.
-- **Testability**: Improved separation of concerns makes the code more testable.
-- **Maintainability**: Clear structure and separation facilitate better management of the codebase.
+- Modularity: Different parts of the library can function independently, enhancing the library's modularity and allowing for easier maintenance and updates.
+- Testability: Improved separation of concerns makes the code more testable.
+- Maintainability: Clear structure and separation facilitate better management of the codebase.
 
-The library also supports Dependency Injection through the standard .NET DI container, aiding in the organization and management of code. Specifically tailored for seamless integration with ASP.NET WebApi, Abblix OIDC Server employs standard controller classes, binding, and routing mechanisms, simplifying the integration of OpenID Connect into your services.
+The library also supports Dependency Injection through the standard .NET DI container, aiding in the organization and management of code. It is hosted either through standard ASP.NET Core MVC controllers or through Minimal API endpoints, each mapped with a single call, simplifying the integration of OpenID Connect into your services.
 
 ## 🛠️ How to Build
 
@@ -102,16 +105,16 @@ After this, `git commit` automatically runs `actionlint` and a custom secrets-in
 
 The sample code in this repository is licensed under the MIT License - see [LICENSE](LICENSE). Copy it into your own project, change it, ship it. The boundary between this code and the product it demonstrates is spelled out in [NOTICE](NOTICE).
 
-Abblix OIDC Server itself is a separate product under its own licence, consumed here as a NuGet package and not redistributed in source form. Its terms are at [abblix.com/license](https://www.abblix.com/license).
+Abblix OIDC Server itself is a separate product under its own license, consumed here as a NuGet package and not redistributed in source form. Its terms are at [abblix.com/license](https://www.abblix.com/license).
 
 ## 🔗 Key Contacts & Resources
 
 For more details about our products, services, or any general information regarding the Abblix OIDC Server, feel free to reach out to us. We are here to provide support and answer any questions you may have. Below are the best ways to contact our team:
 
-- **[Email](mailto:support@abblix.com)**: Send us your inquiries or support requests at support@abblix.com.
-- **[Website](https://www.abblix.com/abblix-oidc-server)**: Visit the official page for more information.
-- **[GitHub Repository](https://github.com/Abblix/Oidc.Server)**: Explore the source code and contribute to the Abblix OIDC Server.
-- **[Abblix Documentation](https://docs.abblix.com/docs)**: Access detailed documentation for all our products and services.
+- [Email](mailto:support@abblix.com): Send us your inquiries or support requests at support@abblix.com.
+- [Website](https://www.abblix.com/abblix-oidc-server): Visit the official page for more information.
+- [GitHub Repository](https://github.com/Abblix/Oidc.Server): Explore the source code and contribute to the Abblix OIDC Server.
+- [Abblix Documentation](https://docs.abblix.com/docs): Access detailed documentation for all our products and services.
 
 We look forward to assisting you and ensuring your experience with our products is successful and enjoyable!
 

@@ -7,9 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Abblix.SharedSignals" Version="2.4.0" />
-    <PackageReference Include="Abblix.SecurityEvents.MinimalAPI" Version="2.4.0" />
-    <PackageReference Include="Abblix.SecurityEvents.CAEP" Version="2.4.0" />
+    <PackageReference Include="Abblix.SharedSignals" Version="3.0.0" />
+    <PackageReference Include="Abblix.SecurityEvents.MinimalAPI" Version="3.0.0" />
+    <PackageReference Include="Abblix.SecurityEvents.CAEP" Version="3.0.0" />
   </ItemGroup>
 
 </Project>
