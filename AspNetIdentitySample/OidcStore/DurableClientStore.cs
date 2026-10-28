@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.MultiTenancy;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using SQLitePCL;
 
 namespace AspNetIdentitySample.OidcStore;
 
@@ -59,13 +61,17 @@ public sealed class DurableClientStore(
 
         // The check above answers the common case quietly; the primary key decides a race between two
         // registrations under one id that both passed it: the second insert violates it, and that
-        // registration is reported as not added.
+        // registration is reported as not added. Any other failure to write is thrown, so a locked or full
+        // database is not reported as an id already taken.
         try
         {
             await db.SaveChangesAsync();
             return true;
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception) when (exception.InnerException is SqliteException
+                                                  {
+                                                      SqliteExtendedErrorCode: raw.SQLITE_CONSTRAINT_PRIMARYKEY,
+                                                  })
         {
             return false;
         }
