@@ -96,7 +96,7 @@ pip install pre-commit
 pre-commit install
 ```
 
-After this, `git commit` automatically runs `actionlint` and a custom secrets-interpolation check on any change to `.github/workflows/`. The same checks run in CI as a backstop.
+After this, `git commit` automatically runs `actionlint` on any change to `.github/workflows/`. CI runs it again, along with the check for expressions inside executed values.
 
 ## 📃 License
 
