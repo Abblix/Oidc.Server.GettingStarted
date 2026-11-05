@@ -1,4 +1,3 @@
 # CI/CD configuration changes require admin review
-# Background: https://github.com/Abblix/Docs/blob/master/wiki/github-repository-security-setup.md
 .github/workflows/  @kirill-abblix
 .github/scripts/    @kirill-abblix

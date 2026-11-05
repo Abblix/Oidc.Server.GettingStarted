@@ -9,8 +9,6 @@
 #
 # Bypass once (NOT recommended; CI re-runs the same checks):
 #   git commit --no-verify
-#
-# Rules and rationale: ../Docs/wiki/github-actions-security-checklist.md
 
 repos:
   - repo: https://github.com/rhysd/actionlint
