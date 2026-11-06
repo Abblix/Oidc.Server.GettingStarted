@@ -125,6 +125,7 @@ out/
 
 # Local dev guidance - kept untracked
 **/CLAUDE.md
+**/AGENTS.md
 
 # ASP.NET Data Protection key ring (runtime, sample)
 dataprotection-keys/
