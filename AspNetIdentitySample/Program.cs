@@ -241,7 +241,7 @@ using (var scope = app.Services.CreateScope())
         await clients.TryAddClientAsync(tenant, new RegisteredClient(client, tokenIds.GenerateTokenId()));
     }
 
-    // The headless client both other providers carry: it obtains a token for itself through client_credentials
+    // The headless client OpenIDProviderApp and OpenIDProviderApp.MinimalApi also carry: it obtains a token for itself through client_credentials
     // and introspects it, which is how requests.http shows the server working before any interactive client runs.
     var consoleClient = new ClientInfo("console_client")
     {

@@ -4,7 +4,7 @@ OpenIDProviderApp is the OpenID Connect provider built step by step in the Getti
 
 ## What it demonstrates
 
-- Registering Abblix OIDC Server in an ASP.NET Core MVC app with `AddOidcServices`, declaring the provider's one issuer as a tenant, and mapping the discovery, authorization, token, userinfo, and JWKS endpoints with `app.MapOidcControllers()`.
+- Registering Abblix OIDC Server in an ASP.NET Core MVC app with `AddOidcServices`, declaring the provider's one issuer as a tenant, and mapping the discovery, authorization, token, userinfo, introspection, and JWKS endpoints with `app.MapOidcControllers()`.
 - Granting every client what it asks for with `AddConsentGrantedForEveryClient`, which fits here because every client is one of this repository's own samples.
 - A minimal user store (`TestUserStorage`) exposed to the library through `IUserInfoProvider`, turning a subject identifier into claims.
 - A login controller and a Bootstrap view under `/Auth/Login` that verify the password and hand the session to the library.
