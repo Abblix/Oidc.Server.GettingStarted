@@ -18,6 +18,7 @@
 
 ## Table of Contents
 - [About the Getting Started](#-about-the-getting-started)
+- [Run the loop with one command](#%EF%B8%8F-run-the-loop-with-one-command)
 - [About Abblix OIDC Server](#%EF%B8%8F-about-abblix-oidc-server)
 - [How to Build](#%EF%B8%8F-how-to-build)
 - [License](#-license)
@@ -40,10 +41,10 @@ The `OpenIDProviderApp` serves as the OpenID Connect provider within this projec
 The `AspNetIdentitySample` is the `OpenIDProviderApp` taken one step toward production: it replaces the in-memory demo user list with a real ASP.NET Core Identity user store backed by Entity Framework Core and SQLite. It demonstrates the two seams where Abblix OIDC Server meets an external user system. First, an `IUserInfoProvider` adapter over Identity's `UserManager` turns a subject identifier into claims. Second, a login flow that keeps responsibilities cleanly split: Identity verifies the password through `CheckPasswordSignInAsync` (password hashing, failed-attempt counting, and lockout), while the library's `IAuthSessionService` issues the OpenID Connect session cookie. The result is a provider whose users, credentials, and profile data live in a database rather than in code, while the protocol handling stays entirely with the library. Its sign-in and sign-up screens are a React and Tailwind SPA that talks to a JSON auth API, with the client's types generated from the server's OpenAPI document, so the same UI works over an MVC or a Minimal API host unchanged.
 
 - OpenIDProviderApp.MinimalApi  
-The `OpenIDProviderApp.MinimalApi` (port 5006) is the Minimal API counterpart of the `OpenIDProviderApp`: the same Abblix OIDC Server protocol core hosted through the `Abblix.Oidc.Server.MinimalApi` adapter instead of MVC. It configures a signing key in code, reads its clients from the `Oidc` section of `appsettings.json` like the MVC provider does, and maps the OIDC endpoints with `MapOidcEndpoints()`, making it a compact reference for hosting the server without MVC. It carries the same three interactive clients and the same `weather` resource as the MVC provider, so the two publish the same capabilities and a client moves between them by changing `Authority`. The addresses in the two discovery documents differ, because the two listen on different ports, and a client that also calls ApiSample needs the API's pinned issuer moved as well. It adds a `client_credentials` client for headless checks, which the MVC provider does not carry. Its own README covers running it.
+The `OpenIDProviderApp.MinimalApi` (port 5006) is the Minimal API counterpart of the `OpenIDProviderApp`: the same Abblix OIDC Server protocol core hosted through the `Abblix.Oidc.Server.MinimalApi` adapter instead of MVC. It configures a signing key in code, reads its clients from the `Oidc` section of `appsettings.json` like the MVC provider does, and maps the OIDC endpoints with `MapOidcEndpoints()`, making it a compact reference for hosting the server without MVC. It carries the same three interactive clients and the same `weather` resource as the MVC provider, so the two publish the same capabilities and a client moves between them by changing `Authority`. The addresses in the two discovery documents differ, because the two listen on different ports, and a client that also calls ApiSample needs the API's pinned issuer moved as well. Both carry `console_client`, a `client_credentials` client for headless checks. Its own README covers running it.
 
 - TestClientApp  
-The `TestClientApp` functions as the Relying Party, acting as a client that depends on the `OpenIDProviderApp` (or its Minimal API twin, `OpenIDProviderApp.MinimalApi`) for user authentication. It demonstrates the interaction between a client application and an OpenID Connect provider, showing how users are authenticated and tokens are obtained. This scenario offers practical insight into integrating OpenID Connect authentication into client applications. The `TestClientApp` uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` to operate as an OpenID Connect client, making it a practical example of real-world authentication in .NET environments.
+The `TestClientApp` functions as the Relying Party, acting as a client that depends on the `OpenIDProviderApp` (or its Minimal API twin, `OpenIDProviderApp.MinimalApi`) for user authentication. It demonstrates the interaction between a client application and an OpenID Connect provider, showing how users are authenticated and tokens are obtained, and it calls `ApiSample` with the access token it receives. This scenario offers practical insight into integrating OpenID Connect authentication into client applications. The `TestClientApp` uses `Microsoft.AspNetCore.Authentication.OpenIdConnect` to operate as an OpenID Connect client, making it a practical example of real-world authentication in .NET environments.
 
 - BffSample  
 The `BffSample` implements the Backend-For-Frontend (BFF) architectural pattern for a React Single Page Application (built with Vite) served by a .NET backend. The backend is a confidential OpenID Connect client: it runs the authorization code flow with PKCE, keeps the resulting tokens in an encrypted, HttpOnly session cookie, and never exposes them to browser JavaScript. Requests from the SPA to protected APIs are proxied through the backend, which strips the session cookie and attaches the access token, so the browser holds a session reference rather than a bearer token. The sample follows the IETF `draft-ietf-oauth-browser-based-apps` BFF profile and pairs with `ApiSample` as the protected resource. It is the runnable counterpart to the [Securing a React SPA with the BFF Pattern](https://docs.abblix.com/docs/react-spa-bff-guide) guide.
@@ -59,6 +60,31 @@ The `ApiSample` demonstrates how to build a secure backend API that works in con
 
 - ExternalKeySample  
 The `ExternalKeySample` is an OpenID Connect provider whose signing and encryption keys are held in an external key custodian, a HashiCorp Vault or OpenBao Transit engine started in Docker or an Azure Key Vault, instead of in the application. It issues `client_credentials` tokens to one service client, publishes only the public halves of its keys, and, with encryption turned on, has the custodian open its encrypted tokens when they are introspected. One setting switches between the two placements the library offers: keys that never leave the custodian, where every signature is a call to it, and keys the server mints itself and keeps sealed to a custodian key, where signing is local. Sealing the vault shows the trade: with keys held in the custodian, signing stops at once; with minted keys, a running server keeps signing and a fresh one cannot start. Its own README covers running it against either custodian.
+
+- McpServerSample  
+The `McpServerSample` is an authorized Model Context Protocol server paired with its own provider. `McpServerApp`, built on the official C# MCP SDK, publishes OAuth 2.0 Protected Resource Metadata (RFC 9728), answers an unauthenticated call with a challenge naming that metadata and the scope it needs, and accepts only access tokens whose audience is its own URI. `ProviderApp`, built on Abblix OIDC Server, declares the MCP server as a resource, lets MCP clients register themselves without an initial access token (RFC 7591) and issues tokens for the resource a client names (RFC 8707), with PKCE. An MCP client that has never met either of them finds the provider through the MCP server, registers, signs the user in and calls the tool. Its own README covers running it and what the provider does not support yet.
+
+Each provider sample (`OpenIDProviderApp`, `OpenIDProviderApp.MinimalApi`, `AspNetIdentitySample`, `ExternalKeySample`) ships a `requests.http` that fetches its discovery document and key set, gets a client credentials token and introspects it, straight from Visual Studio, Rider or VS Code.
+
+## ▶️ Run the loop with one command
+
+`OpenIDProviderApp`, `TestClientApp` and `ApiSample` form a complete loop: a provider, a web client that signs in through it, and an API that accepts the client's access token. From the repository root:
+
+```shell
+dotnet run-loop.cs
+```
+
+`run-loop.cs` is a single-file C# program, so the .NET SDK runs it with nothing else installed beyond the Node.js the samples already need for their front-end assets. It builds the three projects, starts each on the address of its launch profile (provider `https://localhost:5001`, client `https://localhost:5002`, API `https://localhost:5004`) and waits until each answers. Ctrl+C stops all three. It refuses to start while any of those addresses already answers, so it never runs against an older copy left running.
+
+Then walk through the loop in the browser:
+
+- Open `https://localhost:5002`. The page needs a signed-in user, so it sends you to the provider; sign in as `john.doe@example.com` with password `Jd!2024$3cur3`, and you return to the client, which lists the claims from your ID token.
+- Choose Call the API. The client sends its access token to `https://localhost:5004/weatherforecast` and shows the forecast the API returns. The token was requested for the API's `weather` scope, and the API accepts it only because the audience and scope match.
+- Go back and choose Logout. The client ends its own session and the provider's, so the next visit asks you to sign in again.
+
+`dotnet run-loop.cs --check` does the same walk without a browser and exits with a non-zero code at the first step that fails. A workflow runs it on every pull request.
+
+The development certificate must be trusted (`dotnet dev-certs https --trust`), since the three call each other over HTTPS. On Linux, also add `$HOME/.aspnet/dev-certs/trust` to `SSL_CERT_DIR`, as that command explains.
 
 ## 🛡️ About Abblix OIDC Server
 

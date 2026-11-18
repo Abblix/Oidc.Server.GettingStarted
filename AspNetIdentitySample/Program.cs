@@ -214,10 +214,9 @@ using (var scope = app.Services.CreateScope())
     var tokenIds = scope.ServiceProvider.GetRequiredService<ITokenIdGenerator>();
     foreach (var (clientId, port, claimsInIdentityToken) in new[]
              {
-                 ("test_client", 5002, false),
-
-                 // BffSample asks for a token addressed to the API, which the userinfo endpoint
-                 // then refuses, so its profile claims have to travel in the ID token.
+                 // TestClientApp and BffSample ask for a token addressed to the API, which the
+                 // userinfo endpoint then refuses, so their profile claims travel in the ID token.
+                 ("test_client", 5002, true),
                  ("bff_sample", 5003, true),
 
                  ("blazor_sample", 5005, false),

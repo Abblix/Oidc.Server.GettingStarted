@@ -3,16 +3,44 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Net.Http.Headers;
 
 namespace TestClientApp.Controllers;
 
-public class HomeController : Controller
+public class HomeController(IHttpClientFactory httpClientFactory, IConfiguration configuration) : Controller
 {
+    // The API the access token was requested for is the API this page calls
+    private const string ResourceKey = "OpenIdConnect:Resource";
+
     [Authorize]
     public IActionResult Index()
     {
         // Retrieve and pass the user's claims to the view
         return View(User.Claims);
+    }
+
+    [Authorize]
+    public async Task<IActionResult> Weather()
+    {
+        var apiAddress = configuration[ResourceKey]
+                         ?? throw new InvalidOperationException($"The value {ResourceKey} must be set");
+
+        // SaveTokens keeps the tokens from the sign-in in the session cookie
+        var accessToken = await HttpContext.GetTokenAsync("access_token");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(apiAddress), "weatherforecast"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var client = httpClientFactory.CreateClient();
+        using var response = await client.SendAsync(request);
+
+        // The API's own status is passed on, so a refused token shows as a refusal rather than a page
+        return new ContentResult
+        {
+            StatusCode = (int)response.StatusCode,
+            Content = await response.Content.ReadAsStringAsync(),
+            ContentType = response.Content.Headers.ContentType?.ToString(),
+        };
     }
 
     public IActionResult EndSession()

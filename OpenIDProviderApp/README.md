@@ -23,7 +23,7 @@ From the `Oidc.Server.GettingStarted` root:
 - Open `https://localhost:5001/.well-known/openid-configuration` to see the discovery document, with the authorization, token, userinfo, introspection, and JWKS endpoints live.
 - `requests.http` runs the discovery, key set, client credentials token and introspection requests straight from Visual Studio, Rider or VS Code, with `console_client` as the caller.
 
-A provider is only half of a flow, so start a client next to it to sign in. TestClientApp (`https://localhost:5002`) is the simplest. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3` (a demo credential, visible in `Program.cs`).
+A provider is only half of a flow, so start a client next to it to sign in. TestClientApp (`https://localhost:5002`) is the simplest, and `dotnet run-loop.cs` from the root starts it together with this provider and ApiSample. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3` (a demo credential, visible in `Program.cs`).
 
 Node.js is required: the first build bundles Bootstrap for the login page with Vite.
 
