@@ -3,16 +3,10 @@ name: Run the loop
 # Starts the provider, the API and the web client with the same command a reader runs, signs in as the demo
 # user, calls the API with the access token and signs out. A sample that no longer works with the others
 # turns this red.
+# Pull requests only: a fork's code runs here, so the job takes a GitHub-hosted runner rather than one that
+# persists between jobs, and the run already tests the tree the merge produces.
 on:
   pull_request:
-  push:
-    branches: [master, develop]
-    # Nothing below is read by the run
-    paths-ignore:
-      - '**/*.md'
-      - 'LICENSE'
-      - 'NOTICE'
-  workflow_dispatch:
 
 permissions:
   contents: read
