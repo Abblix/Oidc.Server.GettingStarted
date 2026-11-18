@@ -22,7 +22,7 @@ TestClientApp needs a provider running next to it. From the `Oidc.Server.Getting
 
 `dotnet run-loop.cs` from the root starts OpenIDProviderApp, ApiSample and this client together.
 
-Open `https://localhost:5002`: the home page requires authentication, so it sends you to the provider to sign in. With OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, register a new account first. Node.js is required: the client bundles Bootstrap with Vite.
+Open `https://localhost:5002`: the home page requires authentication, so it sends you to the provider to sign in. With OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, register a new account first. An `oidc.db` that AspNetIdentitySample created before this client took its claims from the ID token still holds the older `test_client`, which leaves the profile and email claims out: delete `oidc.db*` once to seed it again. Node.js is required: the client bundles Bootstrap with Vite.
 
 ## Layout
 

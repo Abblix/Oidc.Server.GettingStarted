@@ -77,7 +77,7 @@ Then walk through the loop in the browser:
 
 - Open `https://localhost:5002`. The page needs a signed-in user, so it sends you to the provider; sign in as `john.doe@example.com` with password `Jd!2024$3cur3`, and you return to the client, which lists the claims from your ID token.
 - Choose Call the API. The client sends its access token to `https://localhost:5004/weatherforecast` and shows the forecast the API returns. The token was requested for the API's `weather` scope, and the API accepts it only because the audience and scope match.
-- Choose Logout. The client ends its own session and the provider's, so the next visit asks you to sign in again.
+- Go back and choose Logout. The client ends its own session and the provider's, so the next visit asks you to sign in again.
 
 `dotnet run-loop.cs --check` does the same walk without a browser and exits with a non-zero code at the first step that fails. A workflow runs it on every pull request.
 

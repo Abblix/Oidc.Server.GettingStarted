@@ -8,6 +8,7 @@
 
 using System.Diagnostics;
 using System.Net;
+using System.Security.Authentication;
 using System.Text.Json;
 using System.Web;
 
@@ -64,7 +65,10 @@ try
         Console.WriteLine($"==> Open {client.Address} and sign in as {email} / {password}. Ctrl+C stops all three.");
         await Task.WhenAny(Task.Delay(Timeout.Infinite, stop.Token).ContinueWith(_ => { }),
             Task.WhenAny(samples.Select(sample => sample.Exited)));
-        return samples.Any(sample => sample.HasExited) ? 1 : 0;
+        if (stop.IsCancellationRequested)
+            return 0;
+
+        throw new StepFailed($"{samples.First(sample => sample.HasExited).Name} exited, so the others are stopped too");
     }
 
     await DriveTheLoop();
@@ -75,6 +79,11 @@ catch (StepFailed failure)
 {
     Console.Error.WriteLine($"==> FAILED: {failure.Message}");
     return 1;
+}
+catch (OperationCanceledException) when (stop.IsCancellationRequested)
+{
+    Console.Error.WriteLine("==> Stopped by Ctrl+C");
+    return 130;
 }
 finally
 {
@@ -131,6 +140,12 @@ static async Task<bool> Answers(HttpClient probe, Uri address)
     {
         using var response = await probe.GetAsync(address);
         return true;
+    }
+    catch (HttpRequestException failure) when (failure.InnerException is AuthenticationException)
+    {
+        // Something listens there, and the samples cannot call each other through a certificate nobody trusts
+        throw new StepFailed($"{address} answers with a certificate this machine does not trust: " +
+                             "run `dotnet dev-certs https --trust` (on Linux, also add its folder to SSL_CERT_DIR)");
     }
     catch (HttpRequestException)
     {
