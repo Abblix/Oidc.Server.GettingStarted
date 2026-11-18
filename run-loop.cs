@@ -19,7 +19,7 @@ using System.Web;
 var root = AppContext.GetData("EntryPointFileDirectoryPath") as string
            ?? throw new InvalidOperationException("Run this file with `dotnet run-loop.cs` from the SDK");
 
-const string usage = "Use none, --check, --provider mvc or --provider minimal, --check and --provider in any order.";
+const string usage = "Use no arguments, --check, --provider mvc|minimal, or both in any order.";
 var check = false;
 string? choice = null;
 for (var i = 0; i < args.Length; i++)
@@ -75,15 +75,14 @@ using var probe = new HttpClient(new HttpClientHandler { AllowAutoRedirect = fal
 
 try
 {
-    // Environment variables outrank appsettings.json, so they point the two at the provider without editing them.
-    // Its address is the issuer each provider declares in its Program.cs, written without the trailing slash
-    // the API compares the tokens' iss claim with.
-    var authority = provider.Address.GetLeftPart(UriPartial.Authority);
+    // Environment variables outrank the appsettings files, so they point the two at the provider without editing
+    // them. The API's JwtBearer handler also accepts the issuer of the discovery document it reads from the
+    // authority, so its configured ValidIssuer needs no override.
     if (pointAtProvider)
     {
+        var authority = provider.Address.GetLeftPart(UriPartial.Authority);
         client.Point(["OpenIdConnect", "Authority"], authority);
         api.Point(["JwtBearerAuthentication", "Authority"], authority);
-        api.Point(["JwtBearerAuthentication", "TokenValidationParameters", "ValidIssuer"], authority);
     }
 
     // A sample already listening would answer every step below with binaries this run did not build
