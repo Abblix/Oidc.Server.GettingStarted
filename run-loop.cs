@@ -75,15 +75,16 @@ try
     Console.WriteLine("==> The loop works: signed in, called the API with the access token, signed out");
     return 0;
 }
+// Ctrl+C reaches the build and the samples too, so whatever failed after it is the stop, not a defect
+catch (Exception) when (stop.IsCancellationRequested)
+{
+    Console.Error.WriteLine("==> Stopped by Ctrl+C");
+    return 130;
+}
 catch (StepFailed failure)
 {
     Console.Error.WriteLine($"==> FAILED: {failure.Message}");
     return 1;
-}
-catch (OperationCanceledException) when (stop.IsCancellationRequested)
-{
-    Console.Error.WriteLine("==> Stopped by Ctrl+C");
-    return 130;
 }
 finally
 {
