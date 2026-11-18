@@ -305,9 +305,15 @@ sealed class Sample
 
             using var settings = JsonDocument.Parse(File.ReadAllText(appSettings),
                 new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            // A key under a value that is not an object is not there, the same as a missing key
             var element = settings.RootElement;
-            if (path.All(key => element.TryGetProperty(key, out element)) && element.GetString() is { } value)
-                return value;
+            if (!path.All(key => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(key, out element)))
+                continue;
+
+            if (element.ValueKind != JsonValueKind.String)
+                throw new StepFailed($"{Name} has {string.Join(':', path)} in {file} as {element.ValueKind}, not a string");
+
+            return element.GetString()!;
         }
 
         throw new StepFailed($"{Name} has no {string.Join(':', path)} in its appsettings files");
