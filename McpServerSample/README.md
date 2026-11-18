@@ -39,7 +39,7 @@ dotnet run --project McpServerSample/ProviderApp
 dotnet run --project McpServerSample/McpServerApp
 ```
 
-The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point a desktop or command-line MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser. It has to register with `application_type` `native`, as the MCP specification requires of it: a client registering as a web application is refused a `localhost` redirect. A client running inside a web page is not served: the registration endpoint and the MCP server answer no cross-origin requests. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
+The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point a desktop or command-line MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser. It has to register with `application_type` `native`, as the MCP specification requires of it: a client registering as a web application is refused a `localhost` redirect. The registration endpoint and the MCP server answer requests from the client application itself, so the client runs on the desktop or the command line rather than inside a web page. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
 
 A quick look without a client:
 
