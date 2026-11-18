@@ -88,12 +88,12 @@ step="check the tools"
 command -v dotnet > /dev/null || fail "dotnet is not on PATH"
 python=""
 for candidate in python3 python; do
-  if command -v "$candidate" > /dev/null && "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2> /dev/null; then
+  if command -v "$candidate" > /dev/null && "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2> /dev/null; then
     python="$candidate"
     break
   fi
 done
-[ -n "$python" ] || fail "Python 3.8 or later is not on PATH"
+[ -n "$python" ] || fail "Python 3.9 or later is not on PATH"
 
 if [ -n "$nuget_source" ]; then
   step="check the NuGet source"
@@ -143,9 +143,16 @@ case "$(uname -s)" in
     status=0
     trust_certificate || status=$?
     [ "$status" -eq 0 ] || [ "$status" -eq 4 ] || fail "dotnet dev-certs https --trust exited with $status"
-    default_cert_dir=/etc/ssl/certs
-    [ -d /usr/lib/ssl/certs ] && default_cert_dir=/usr/lib/ssl/certs
-    export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:${SSL_CERT_DIR:-$default_cert_dir}"
+    # .NET on Linux reads trusted certificates from OpenSSL's folders, and --trust put the development
+    # certificate into a folder of its own, which the reader adds as that command's output says
+    if [ -d /usr/lib/ssl/certs ]; then
+      # #region trust-certificate-linux
+      export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs"
+      # #endregion
+    else
+      # Distributions other than Debian and Ubuntu keep the system certificates here
+      export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/etc/ssl/certs"
+    fi
     ;;
   *)
     # Windows and macOS ask the user to confirm the trust, so it is asked only when not given yet
@@ -161,8 +168,26 @@ if [ -n "$nuget_source" ]; then
   if command -v cygpath > /dev/null && [ "${nuget_source#*://}" = "$nuget_source" ]; then
     nuget_source="$(cygpath -w "$nuget_source")"
   fi
-  dotnet new nugetconfig > /dev/null
-  dotnet nuget add source "$nuget_source" --name guide-extra-source --configfile nuget.config > /dev/null
+  # Abblix packages come from the extra source only, so one missing there fails the restore instead of
+  # arriving from nuget.org; everything else comes from nuget.org
+  "$python" - "$nuget_source" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+configuration = ET.Element("configuration")
+sources = ET.SubElement(configuration, "packageSources")
+ET.SubElement(sources, "clear")
+ET.SubElement(sources, "add", key="nuget.org", value="https://api.nuget.org/v3/index.json")
+ET.SubElement(sources, "add", key="guide-extra-source", value=sys.argv[1])
+mapping = ET.SubElement(configuration, "packageSourceMapping")
+for key, pattern in (("nuget.org", "*"), ("guide-extra-source", "Abblix.*")):
+    ET.SubElement(ET.SubElement(mapping, "packageSource", key=key), "package", pattern=pattern)
+ET.indent(configuration)
+ET.ElementTree(configuration).write("nuget.config", encoding="utf-8", xml_declaration=True)
+PY
+  # A package already in the machine's NuGet cache wins over the source even when the source holds a
+  # newer build of the same version, so this run keeps a cache of its own
+  NUGET_PACKAGES="$(pwd)/.nuget-packages"
+  export NUGET_PACKAGES
 fi
 
 step="create the solution"
@@ -215,13 +240,19 @@ step="add Abblix.Oidc.Server.Mvc to OpenIDProviderApp"
   fi
 # bash 3.2 on macOS does not stop the script when a ( ... ) block fails under set -e
 ) || fail "dotnet add package exited with $?"
-"$python" - OpenIDProviderApp/obj/project.assets.json <<'PY' || fail "Abblix.Oidc.Server.Mvc was not restored exactly once"
+"$python" - OpenIDProviderApp/obj/project.assets.json "$abblix_version" <<'PY' || fail "the restored Abblix packages are not all of the version asked for"
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as file:
-    libraries = json.load(file)["libraries"]
-versions = [name.split("/")[1] for name in libraries if name.split("/")[0].lower() == "abblix.oidc.server.mvc"]
-print(f"guide.sh: OpenIDProviderApp uses Abblix.Oidc.Server.Mvc {', '.join(versions) or 'of no version'}")
-sys.exit(len(versions) != 1)
+    libraries = [name.split("/") for name in json.load(file)["libraries"]]
+abblix = sorted((name, version) for name, version in libraries if name.lower().startswith("abblix."))
+print("guide.sh: OpenIDProviderApp uses " + ", ".join(f"{name} {version}" for name, version in abblix))
+mvc = [version for name, version in abblix if name.lower() == "abblix.oidc.server.mvc"]
+if len(mvc) != 1:
+    sys.exit(1)
+# The package's own dependencies are lower bounds, so with a version asked for every Abblix package
+# must be the one restored for Abblix.Oidc.Server.Mvc, which was asked for exactly
+if sys.argv[2] and any(version != mvc[0] for _, version in abblix):
+    sys.exit(1)
 PY
 
 step="add Microsoft.AspNetCore.Authentication.OpenIdConnect to TestClientApp"
@@ -379,7 +410,7 @@ def visit(url, form=None):
     chain.clear()
     data = urllib.parse.urlencode(form).encode() if form is not None else None
     try:
-        with browser.open(url, data=data, timeout=30) as response:
+        with browser.open(url, data=data, timeout=10) as response:
             return response.geturl(), response.read().decode("utf-8")
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", "replace")
@@ -409,7 +440,13 @@ def expect_login_page(url, html):
 
 
 url, body = visit(f"{PROVIDER}/.well-known/openid-configuration")
-issuer = json.loads(body).get("issuer")
+try:
+    discovery = json.loads(body)
+except ValueError:
+    fail(f"{url} answered with something other than JSON: {body[:500]}")
+if not isinstance(discovery, dict):
+    fail(f"{url} answered with JSON that is not an object: {body[:500]}")
+issuer = discovery.get("issuer")
 if issuer != PROVIDER:
     fail(f"the discovery document names the issuer {issuer!r}, the guide configures {PROVIDER!r}")
 print(f"discovery: 200, issuer {issuer}")
