@@ -150,8 +150,8 @@ case "$(uname -s)" in
       export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs"
       # #endregion
     else
-      # Distributions other than Debian and Ubuntu keep the system certificates here
-      export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/etc/ssl/certs"
+      # Elsewhere the system certificates are reachable through /etc/ssl/certs
+      export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:${SSL_CERT_DIR:-/etc/ssl/certs}"
     fi
     ;;
   *)
