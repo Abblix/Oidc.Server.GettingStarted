@@ -51,6 +51,11 @@ builder.Services.AddOidcServices(options =>
 
         LoginUri = new Uri("/Auth/Login", UriKind.Relative),
 
+        // MCP clients register with the scope the MCP server's challenge names, and the registration endpoint
+        // knows only the tenant's own scopes, not those of its resources: declared on the resource alone,
+        // mcp:tools is refused at registration as an unknown scope.
+        Scopes = [new ScopeDefinition(configuration["McpServer:Scope"]!)],
+
         // The MCP server as a protected resource. A client naming it in the resource parameter gets an access
         // token whose audience is exactly this URI, which is what the MCP server checks.
         Resources =

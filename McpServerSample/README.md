@@ -9,7 +9,7 @@ The flow follows the authorization part of the MCP specification (revision 2026-
 - It reads the provider's metadata at `/.well-known/oauth-authorization-server` (RFC 8414). There it finds the registration endpoint and checks that PKCE is supported.
 - It registers itself with no initial access token (RFC 7591).
 - It runs the authorization code flow with PKCE (S256) and names the MCP server in the `resource` parameter (RFC 8707) of both the authorization request and the token request.
-- It calls the tool with the access token. The token's `aud` is exactly `https://localhost:5008/mcp`, and the MCP server refuses any token whose audience is something else.
+- It calls the tool with the access token. The token's `aud` is exactly `https://localhost:5008/mcp`, and the MCP server refuses any token whose audience is something else, and any token that is not an access token (`typ` `at+jwt`).
 
 ## What it demonstrates
 
@@ -38,7 +38,7 @@ dotnet run --project McpServerSample/ProviderApp
 dotnet run --project McpServerSample/McpServerApp
 ```
 
-The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point any MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
+The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point a desktop or command-line MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser. It has to register with `application_type` `native`, as the MCP specification requires of it: a client registering as a web application is refused a `localhost` redirect. A client running inside a web page is not served: the registration endpoint and the MCP server answer no cross-origin requests. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
 
 A quick look without a client:
 
@@ -52,14 +52,15 @@ The first returns `401` with the challenge, the second the resource metadata, an
 
 ## What this provider does not do yet
 
-- A dynamically registered client gets no refresh token today. MCP clients ask for `offline_access`, but the provider ignores that scope unless the request carries `prompt=consent` or the client is configured for offline access. A client that registered itself cannot be configured that way. The client signs the user in again each time its access token expires.
+- A dynamically registered client gets a refresh token only when its authorization request carries `prompt=consent`. MCP clients ask for `offline_access` without it, and the provider then ignores that scope; a client configured for offline access would get one, but a client that registered itself cannot be configured that way. Such a client signs the user in again each time its access token expires.
+- The registration endpoint knows only the scopes declared on the tenant, not those declared on a resource, so `mcp:tools` is declared in both places. With the resource alone, an MCP client registering with that scope is refused with `Unknown scope`.
 - Client ID Metadata Documents, the registration mechanism the MCP specification now recommends over dynamic registration, are not supported. Clients that prefer them fall back to dynamic registration, which this provider offers.
 
 ## Before you take it further
 
 - Consent is granted automatically (`AddConsentGrantedForEveryClient`). With open registration any application can become a client, so a real provider shows the user which client is asking and where it will send the code, through an `IUserConsentsProvider` of its own.
 - Registered clients live in memory and are gone when the provider restarts. A client holding a `client_id` from before the restart has to register again.
-- Signing keys are generated at startup, so a restarted provider invalidates every token issued before.
+- Signing keys are generated at startup, so a restarted provider invalidates every token issued before. Restart the MCP server with it: until it fetches the provider's keys again, it refuses tokens signed with the new key.
 
 ## Layout
 

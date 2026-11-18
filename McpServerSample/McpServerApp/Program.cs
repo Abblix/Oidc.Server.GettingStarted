@@ -33,6 +33,11 @@ builder.Services
         // token issued for any other resource, or for none, is refused here.
         options.Audience = resource.OriginalString;
 
+        // The provider gives a refresh token the same audience and signing key as the access token, so only the
+        // JWT type tells them apart. Without this the MCP server would take a refresh token as a bearer token,
+        // and the specification says MCP servers "MUST NOT accept or transit any other tokens".
+        options.TokenValidationParameters.ValidTypes = ["at+jwt"];
+
         // Keep the claims under their JWT names (sub, scope) rather than the mapped .NET claim types
         options.MapInboundClaims = false;
     })
