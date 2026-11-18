@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   no-inline-secrets:
-    name: Block inline untrusted-input interpolation
+    name: Block expressions inside executed values
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,7 +34,7 @@ jobs:
 
       # --only-binary :all: skips arbitrary setup-script execution at install
       # time (closes Sonar S8541). --require-hashes + pinned requirements file
-      # locks both the resolved version and the artifact bytes — a malicious
+      # locks both the resolved version and the artifact bytes - a malicious
       # PyPI release with the same version cannot pass the hash check (closes
       # Sonar S8544).
         timeout-minutes: 3
@@ -44,8 +44,10 @@ jobs:
             --require-hashes -r .github/workflows/requirements/lint-workflows.txt
 
         timeout-minutes: 3
-      - name: "Block inline untrusted-input interpolation in run: blocks"
-        run: python .github/scripts/lint-no-inline-secrets.py
+      - name: Block expressions inside executed values
+        # pinned commit (internal action, no semver tag) - one copy of the check for every repository;
+        # it tests itself on planted expressions before reading this one
+        uses: Abblix/.github/.github/actions/lint-workflow-expressions@9b0dd9cdb5a4a5b4c9f627c437d9f357146030a5
 
         timeout-minutes: 3
     timeout-minutes: 5
