@@ -40,6 +40,21 @@ builder.Services
 
         // Keep the claims under their JWT names (sub, scope) rather than the mapped .NET claim types
         options.MapInboundClaims = false;
+
+        // The tools act for a user, so a token issued to a client on its own behalf (client_credentials, whose
+        // subject is the client itself) is refused like any other token not meant for this server
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                var subject = context.Principal?.FindFirst("sub")?.Value;
+                var clientId = context.Principal?.FindFirst("client_id")?.Value;
+                if (string.IsNullOrEmpty(subject) || string.Equals(subject, clientId, StringComparison.Ordinal))
+                    context.Fail("The access token carries no user");
+
+                return Task.CompletedTask;
+            },
+        };
     })
     .AddScheme<McpAuthenticationOptions, ScopeChallengeHandler>(
         McpAuthenticationDefaults.AuthenticationScheme,

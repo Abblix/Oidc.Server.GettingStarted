@@ -1,8 +1,10 @@
 using System.Net;
+using Abblix.DependencyInjection;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
+using Abblix.Oidc.Server.Endpoints.DynamicClientManagement.Validation;
 using Abblix.Oidc.Server.Features;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
@@ -72,6 +74,12 @@ builder.Services.AddOidcServices(options =>
 // Serves the registration endpoint and advertises it as registration_endpoint in the metadata; without this
 // call the provider has no registration endpoint at all.
 builder.Services.AddDynamicClientRegistration();
+
+// Open registration admits any grant type the server supports, client_credentials included, which would get a
+// token for the MCP server with no user behind it. This step, added to the end of the library's registration
+// pipeline, admits only the grants an MCP client acting for a user needs.
+builder.Services.Decompose<IClientRegistrationContextValidator>()
+    .AddLast(ServiceDescriptor.Singleton<IClientRegistrationContextValidator, UserGrantsOnlyValidator>());
 
 builder.Services.AddAuthentication().AddCookie();
 

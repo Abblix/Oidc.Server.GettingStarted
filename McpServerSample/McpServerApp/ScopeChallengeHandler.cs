@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.AspNetCore.Authentication;
 
@@ -19,11 +20,16 @@ public sealed class ScopeChallengeHandler(
     ILoggerFactory logger,
     UrlEncoder encoder) : McpAuthenticationHandler(options, logger, encoder)
 {
-    protected override Task HandleChallengeAsync(AuthenticationProperties properties)
+    protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
     {
+        // RFC 6750 section 3: a request that "included an access token and failed authentication" SHOULD be told
+        // why, while a request without a token gets no error code. The JwtBearer result is the one already
+        // computed for this request.
+        var authentication = await Context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
+        var error = authentication.Failure is null ? "" : "error=\"invalid_token\", ";
+
         Response.StatusCode = StatusCodes.Status401Unauthorized;
-        Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{MetadataUri}\", scope=\"{Scope}\"";
-        return Task.CompletedTask;
+        Response.Headers.WWWAuthenticate = $"Bearer {error}resource_metadata=\"{MetadataUri}\", scope=\"{Scope}\"";
     }
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
