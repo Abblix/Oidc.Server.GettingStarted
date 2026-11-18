@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 using Abblix.Jwt;
+using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 
@@ -18,8 +19,10 @@ public class TestUserStore(params TestUser[] users) : IUserInfoProvider
 {
     /// <summary>
     /// Asynchronously retrieves user information based on an authentication session and a collection of requested claims.
+    /// The server passes the tenant the request reached first; this provider serves a single tenant, so it does not look at it.
     /// </summary>
-    public Task<JsonObject?> GetUserInfoAsync(AuthSession authSession, IEnumerable<string> requestedClaims)
+    public Task<JsonObject?> GetUserInfoAsync(
+        TenantDefinition tenant, AuthSession authSession, IEnumerable<string> requestedClaims)
     {
         var user = users.FirstOrDefault(u => u.Subject == authSession.Subject);
         if (user == null)

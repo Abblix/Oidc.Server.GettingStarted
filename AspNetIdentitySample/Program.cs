@@ -3,11 +3,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Abblix.DependencyInjection;
 using Abblix.Jwt;
+using Abblix.Oidc;
+using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
 using Abblix.Oidc.Server.Features.ClientInformation;
+using Abblix.Oidc.Server.Features.Consents;
+using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.RandomGenerators;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
@@ -23,7 +26,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -68,22 +70,34 @@ builder.Services.AddOpenApi(options =>
     // library's OIDC protocol endpoints stay out of the generated schema and it stays small.
     options.ShouldInclude = description => description.RelativePath?.StartsWith("api/auth") ?? false);
 
+// Grants every client everything it asks for, which suits this provider: its clients are all its own.
+// To ask the end user for consent, register your own IUserConsentsProvider instead.
+builder.Services.AddConsentGrantedForEveryClient();
+
+// The one issuer this provider serves. The seeding below writes the signing key and the clients under
+// this tenant's id, so the same definition is handed to the server and kept for the seeding.
+var tenant = new TenantDefinition
+{
+    Id = "main",
+
+    // The address the app is served on, written into every token it issues
+    Issuer = new Uri("https://localhost:5001"),
+
+    Resources =
+    [
+        new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
+    ],
+    LoginUri = new Uri("/Auth/Login", UriKind.Relative),
+
+    // SigningKeys and Clients are deliberately NOT set here. They come from the SQLite-backed
+    // stores registered below, so they outlive a restart. A first-party client could still be
+    // declared in Clients: the server serves those ahead of any stored registration under the same id.
+};
+
 // Register and configure Abblix OIDC Server through the Minimal API adapter: the same framework-neutral
 // core the MVC integration registers, with a different transport. The endpoints are mapped later with
 // app.MapOidcEndpoints().
-builder.Services.AddOidcServices(options =>
-{
-    options.Issuer = "https://localhost:5001";
-    options.Resources =
-    [
-        new ResourceDefinition(new Uri("https://localhost:5004", UriKind.Absolute), new ScopeDefinition("weather")),
-    ];
-    options.LoginUri = new Uri("/Auth/Login", UriKind.Relative);
-
-    // SigningKeys and Clients are deliberately NOT set here. They come from the SQLite-backed
-    // providers registered below, so they outlive a restart. A first-party client could still be
-    // declared in options.Clients and would win on read (see LayeredClientInfoProvider).
-});
+builder.Services.AddOidcServices(options => options.Tenants.Add(tenant));
 
 // Durable OIDC state (signing keys and client registrations) lives in SQLite so a restart neither
 // invalidates issued tokens nor forgets registered clients. The providers below are singletons, so
@@ -103,21 +117,16 @@ builder.Services.AddDataProtection()
     .SetApplicationName("AspNetIdentitySample");
 #warning The Data Protection key ring above is a LOCAL, UNENCRYPTED folder: single-node and unprotected. For real deployments persist it to a store every instance shares and add ProtectKeysWith an X.509 certificate or a KMS, or a fresh pod cannot decrypt the stored signing key. See https://docs.abblix.com/docs/signing-key-persistence#encrypting-the-stored-key-at-rest
 
-// Signing keys: replace the ephemeral in-memory default (OidcOptionsKeysProvider, which would
-// generate a new key on every startup) with the database-backed provider. Registered after
-// AddOidcServices so the last singular registration wins.
+// Signing keys: the database-backed provider takes the place of the server's default, which reads each
+// tenant's SigningKeys from its definition. The server adds its default only when no provider is
+// registered, and leaves a provider of the host's own to answer for each tenant's keys, so the tenant
+// above declares none.
 builder.Services.AddSingleton<IAuthServiceKeysProvider, DatabaseKeysProvider>();
 
-// Client store: decorate the read seam and replace the write seam, after AddOidcServices.
-// The order is what Decorate needs - it wraps the registration already in the collection, so
-// the library's own must be there first. Registering a store BEFORE would also work, since
-// the library aliases its in-memory one with TryAddAlias and a host registration wins - but
-// then the decorator would wrap this store rather than the library's, and the clients from
-// configuration would quietly disappear instead of being the layer underneath.
-builder.Services.AddSingleton<DurableClientStore>();
-builder.Services.Decorate<IClientInfoProvider, LayeredClientInfoProvider>();
-builder.Services.RemoveAll<IClientInfoManager>();
-builder.Services.AddAlias<IClientInfoManager, DurableClientStore>();
+// Client store: the server keeps its own, which serves the clients the tenant declares first, and keeps
+// the registrations in the store the host registers here instead of in memory. A singleton, since the
+// server's client store that calls it is one.
+builder.Services.AddSingleton<ITenantClientRegistrationStore, DurableClientStore>();
 
 // The host-registered cookie carries the library's OIDC session: Identity never signs in, it only verifies.
 // The security stamp snapshotted at login is compared on every request, so a password change
@@ -167,7 +176,10 @@ using (var scope = app.Services.CreateScope())
     {
         await oidcStore.Database.EnsureCreatedAsync();
 
-        if (!await oidcStore.SigningKeys.AnyAsync(key => key.IsActive && key.Usage == PublicKeyUsages.Signature))
+        if (!await oidcStore.SigningKeys.AnyAsync(key => key.TenantId == tenant.Id
+                                                         && key.Generation == tenant.Generation
+                                                         && key.IsActive
+                                                         && key.Usage == PublicKeyUsages.Signature))
         {
             var keyProtector = scope.ServiceProvider
                 .GetRequiredService<IDataProtectionProvider>()
@@ -177,6 +189,8 @@ using (var scope = app.Services.CreateScope())
             oidcStore.SigningKeys.Add(new PersistedSigningKey
             {
                 KeyId = signingKey.KeyId!,
+                TenantId = tenant.Id,
+                Generation = tenant.Generation,
                 Usage = PublicKeyUsages.Signature,
                 JwkJson = keyProtector.Protect(JsonSerializer.Serialize<JsonWebKey>(signingKey)),
                 CreatedAt = clock.GetUtcNow(),
@@ -189,8 +203,10 @@ using (var scope = app.Services.CreateScope())
     // any client in the solution reaches it on the same port with no change of its own. Here they
     // are rows in SQLite that survive a restart and can be added to at runtime, there they are
     // configuration read at startup. This sample does not enable dynamic client registration, so
-    // the rows are written only by the seeding below.
-    var clients = scope.ServiceProvider.GetRequiredService<DurableClientStore>();
+    // the rows are written only by the seeding below, through the server's client store as a
+    // registration would be.
+    var clients = scope.ServiceProvider.GetRequiredService<IClientInfoManager>();
+    var tokenIds = scope.ServiceProvider.GetRequiredService<ITokenIdGenerator>();
     foreach (var (clientId, port, claimsInIdentityToken) in new[]
              {
                  ("test_client", 5002, false),
@@ -202,10 +218,11 @@ using (var scope = app.Services.CreateScope())
                  ("blazor_sample", 5005, false),
              })
     {
-        if (await clients.TryFindClientAsync(clientId) is not null)
-            continue;
-
-        await clients.AddClientAsync(new ClientInfo(clientId)
+        // A registration holds the identifier of the registration access token that manages it. No token
+        // is issued for a seeded client, so it holds the identifier of one never issued, and no request to
+        // the RFC 7592 configuration endpoint can change or remove it. On the next run the client is
+        // already held, so the add is refused and the stored row is kept as it is.
+        var client = new ClientInfo(clientId)
         {
             ClientSecrets = [new ClientSecret { Sha512Hash = SHA512.HashData(Encoding.UTF8.GetBytes("secret")) }],
             TokenEndpointAuthMethod = ClientAuthenticationMethods.ClientSecretPost,
@@ -214,7 +231,9 @@ using (var scope = app.Services.CreateScope())
             RedirectUris = [new Uri($"https://localhost:{port}/signin-oidc", UriKind.Absolute)],
             PostLogoutRedirectUris = [new Uri($"https://localhost:{port}/signout-callback-oidc", UriKind.Absolute)],
             ForceUserClaimsInIdentityToken = claimsInIdentityToken,
-        });
+        };
+
+        await clients.TryAddClientAsync(tenant, new RegisteredClient(client, tokenIds.GenerateTokenId()));
     }
 }
 
@@ -234,7 +253,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 // The OIDC protocol endpoints (discovery, authorize, token, userinfo, end-session, ...): the Minimal
-// API counterpart of the MVC host's app.MapControllers().
+// API counterpart of the MVC host's app.MapOidcControllers().
 app.MapOidcEndpoints();
 
 if (app.Environment.IsDevelopment())
@@ -306,7 +325,7 @@ static async Task<IResult> LoginAsync(
     UserManager<IdentityUser> userManager,
     SignInManager<IdentityUser> signIn,
     TimeProvider clock,
-    IOptions<OidcRouteOptions> routeOptions)
+    IOidcEndpointResolver endpointResolver)
 {
     var user = await userManager.FindByEmailAsync(request.Email);
 
@@ -321,7 +340,7 @@ static async Task<IResult> LoginAsync(
         });
 
     var redirectUrl = await SignInAndBuildResumeUrl(
-        authService, sessionIdGenerator, userManager, clock, routeOptions.Value, user!, request.RequestUri);
+        authService, sessionIdGenerator, userManager, clock, endpointResolver, user!, request.RequestUri);
     return Results.Ok(new AuthSuccessResponse { RedirectUrl = redirectUrl });
 }
 
@@ -334,7 +353,7 @@ static async Task<IResult> RegisterAsync(
     ISessionIdGenerator sessionIdGenerator,
     UserManager<IdentityUser> userManager,
     TimeProvider clock,
-    IOptions<OidcRouteOptions> routeOptions)
+    IOidcEndpointResolver endpointResolver)
 {
     // Minimal API does not auto-run the model's data annotations, so check the one that UserManager
     // cannot: that the two password boxes match.
@@ -344,7 +363,7 @@ static async Task<IResult> RegisterAsync(
             ["confirmPassword"] = ["The password and its confirmation do not match."],
         });
 
-#warning DEV shortcut: sign-up leaves the address unconfirmed, so email_verified is honestly false, yet still lets the account sign in. A real deployment emails a confirmation link and only trusts the address once the user proves control of the mailbox.
+#warning DEV shortcut: sign-up leaves the address unconfirmed, so email_verified is honestly false, yet still lets the account sign in. A real deployment emails a confirmation link and only trusts the address once the user proves control of the mailbox. See https://docs.abblix.com/docs/aspnet-identity-integration#wire-identity-into-the-container
     var user = new IdentityUser
     {
         UserName = request.Email,
@@ -365,19 +384,20 @@ static async Task<IResult> RegisterAsync(
     await userManager.AddClaimAsync(user, new Claim("name", request.Name));
 
     var redirectUrl = await SignInAndBuildResumeUrl(
-        authService, sessionIdGenerator, userManager, clock, routeOptions.Value, user, request.RequestUri);
+        authService, sessionIdGenerator, userManager, clock, endpointResolver, user, request.RequestUri);
     return Results.Ok(new AuthSuccessResponse { RedirectUrl = redirectUrl });
 }
 
 // Login and sign-up share their tail: establish the library session, then return the authorize URL that
-// resumes the OIDC flow the user was pulled out of. The Minimal API adapter has no MVC route-token
-// table, so the route comes from OidcRouteOptions (its Authorize defaults to /connect/authorize).
+// resumes the OIDC flow the user was pulled out of. The endpoint resolver answers with the authorize URL
+// as the adapter mapped it, so a changed route or a group prefix needs no edit here; it answers null only
+// for a disabled endpoint, and this sample keeps authorize enabled.
 static async Task<string> SignInAndBuildResumeUrl(
     IAuthSessionService authService,
     ISessionIdGenerator sessionIdGenerator,
     UserManager<IdentityUser> userManager,
     TimeProvider clock,
-    OidcRouteOptions routes,
+    IOidcEndpointResolver endpointResolver,
     IdentityUser user,
     string? requestUri)
 {
@@ -402,5 +422,7 @@ static async Task<string> SignInAndBuildResumeUrl(
     await authService.SignInAsync(authSession);
 
     return QueryHelpers.AddQueryString(
-        routes.Authorize, AuthorizationRequest.Parameters.RequestUri, requestUri ?? string.Empty);
+        endpointResolver.Resolve(OidcEndpoints.Authorize)!.AbsoluteUri,
+        AuthorizationRequest.Parameters.RequestUri,
+        requestUri ?? string.Empty);
 }

@@ -1,12 +1,12 @@
 {
-  "openapi": "3.1.1",
+  "openapi": "3.2.0",
   "info": {
     "title": "AspNetIdentitySample | v1",
     "version": "1.0.0"
   },
   "servers": [
     {
-      "url": "http://localhost:5080/"
+      "url": "https://localhost:5001"
     }
   ],
   "paths": {

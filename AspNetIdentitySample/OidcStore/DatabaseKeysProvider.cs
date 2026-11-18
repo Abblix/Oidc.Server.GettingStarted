@@ -1,22 +1,25 @@
 using System.Text.Json;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.Common.Interfaces;
+using Abblix.Oidc.Server.Features.MultiTenancy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 namespace AspNetIdentitySample.OidcStore;
 
 /// <summary>
-/// Loads the OIDC signing keys from the database instead of generating a fresh key at every
+/// Loads each tenant's OIDC signing keys from the database instead of generating a fresh key at every
 /// startup. Because the same key is reloaded on restart, tokens issued before the restart still
 /// validate: the exact failure mode that the ephemeral <see cref="JsonWebKeyFactory.CreateRsa"/>
 /// default runs into (a rolling restart signs new tokens with a new kid and orphans every token
 /// already in circulation).
 /// </summary>
 /// <remarks>
-/// Registered as a singleton after <c>AddOidcServices</c>, so it overrides the library default
-/// (<c>OidcOptionsKeysProvider</c>). A singleton cannot hold a scoped <c>DbContext</c>, so it
-/// opens one per call through <see cref="IDbContextFactory{TContext}"/>.
+/// Registered as a singleton after <c>AddOidcServices</c>; the server adds its own provider only when none
+/// is registered, so this one serves the keys, and the tenant declares no <c>SigningKeys</c> of its own.
+/// Each tenant's keys are the rows under its id and generation, so no tenant publishes or signs with
+/// another's. A singleton cannot hold a scoped <c>DbContext</c>, so it opens one per call through
+/// <see cref="IDbContextFactory{TContext}"/>.
 /// </remarks>
 public sealed class DatabaseKeysProvider(
     IDbContextFactory<OidcStoreDbContext> contextFactory,
@@ -28,16 +31,20 @@ public sealed class DatabaseKeysProvider(
 
     private readonly IDataProtector _protector = dataProtection.CreateProtector(SigningKeyProtectorPurpose);
 
-    public async IAsyncEnumerable<JsonWebKey> GetSigningKeys(bool includePrivateKeys = false)
+    public async IAsyncEnumerable<JsonWebKey> GetSigningKeys(TenantDefinition tenant, bool includePrivateKeys = false)
     {
         // TODO: this reads the database on every token-signing operation. Keys rotate on human
         // timescales, not per request, so a production provider caches the result in-process for a
-        // short TTL and invalidates on a rotation signal. Left uncached here to keep the seam obvious.
+        // short TTL, keyed by the tenant's id and generation, and invalidates on a rotation signal.
+        // Left uncached here to keep the seam obvious.
         // See https://docs.abblix.com/docs/signing-key-persistence
         await using var db = await contextFactory.CreateDbContextAsync();
 
         var records = await db.SigningKeys
-            .Where(key => key.IsActive && key.Usage == PublicKeyUsages.Signature)
+            .Where(key => key.TenantId == tenant.Id
+                          && key.Generation == tenant.Generation
+                          && key.IsActive
+                          && key.Usage == PublicKeyUsages.Signature)
             .ToListAsync();
 
         foreach (var record in records)
@@ -58,7 +65,7 @@ public sealed class DatabaseKeysProvider(
     }
 
     // This sample issues no encrypted tokens, so it stores and returns no encryption keys.
-    public async IAsyncEnumerable<JsonWebKey> GetEncryptionKeys(bool includePrivateKeys = false)
+    public async IAsyncEnumerable<JsonWebKey> GetEncryptionKeys(TenantDefinition tenant, bool includePrivateKeys = false)
     {
         await Task.CompletedTask;
         yield break;
