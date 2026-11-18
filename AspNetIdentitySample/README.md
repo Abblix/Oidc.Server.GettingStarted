@@ -19,10 +19,10 @@ Its development-grade defaults (an unconfirmed email on sign-up, an unencrypted 
 
 Requires the .NET 11 SDK and Node.js. From the `Oidc.Server.GettingStarted` root:
 
-- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It stands in for OpenIDProviderApp on the same port and seeds the same three clients, so TestClientApp, BffSample and BlazorSample all point at it unchanged.
+- `dotnet run --project AspNetIdentitySample` starts the provider on `https://localhost:5001`. It stands in for OpenIDProviderApp on the same port and seeds the same clients, so TestClientApp, BffSample and BlazorSample all point at it unchanged.
 - Start a client next to it (TestClientApp on `https://localhost:5002`) and open it: its home page requires authentication, so it sends you straight to the provider. Create an account there with Create one on the sign-in screen, and you return to the client already signed in.
 
-On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the three clients. Delete the `.db` files to start from an empty store. Node.js is required because the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.
+On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a signing key and the clients. Delete the `.db` files to start from an empty store. Node.js is required because the auth screens are a React SPA that Vite builds into `wwwroot/auth` on first build.
 
 If you ran a 2.x version of this sample before, delete `oidc.db` (with its `-shm` and `-wal` files) before the first run: the store's tables now carry the tenant's id and generation, `EnsureCreated` does not alter tables that already exist, and the old file stops the provider at startup with `no such column`. The next run creates a new signing key, so tokens issued by the old version stop validating. `users.db` is unchanged and can stay.
 
@@ -34,6 +34,7 @@ If you ran a 2.x version of this sample before, delete `oidc.db` (with its `-shm
 - `IdentityUserInfoProvider.cs`: the subject-to-claims adapter over Identity.
 - `OidcStore/`: the SQLite-backed signing-key provider (`DatabaseKeysProvider`), the client registration store (`DurableClientStore`), and their `DbContext`.
 - `AppDbContext.cs`: the Identity `DbContext`.
+- `requests.http`: the discovery, key set, client credentials token and introspection requests, ready to send from the IDE with the seeded `console_client`.
 
 ## The guides behind this sample
 

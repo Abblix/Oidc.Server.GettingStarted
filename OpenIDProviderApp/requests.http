@@ -1,0 +1,44 @@
+# Requests that show OpenIDProviderApp working before any client exists: the discovery
+# document, the published keys, an access token from the client credentials grant, and introspection of
+# that token.
+#
+# Start the provider first (dotnet run --project OpenIDProviderApp), then open this file in Visual Studio,
+# JetBrains Rider or VS Code (REST Client extension) and send each request in turn. Trust the development
+# HTTPS certificate once so the client accepts it:
+#     dotnet dev-certs https --trust
+
+# The provider's address: its launch profile's URL, which is also the issuer it writes into every token.
+@host = https://localhost:5001
+
+# A confidential client registered for the client credentials grant only; "secret" is the demo
+# secret whose SHA-512 hash the provider keeps in appsettings.json.
+@clientId = console_client
+@clientSecret = secret
+
+# After running the token request below, paste its access_token here to run the introspection request.
+@accessToken = paste-the-access_token-here
+
+### Discovery document
+# Answers 200 with the issuer https://localhost:5001 and the endpoint addresses used below: token_endpoint,
+# jwks_uri and introspection_endpoint.
+GET {{host}}/.well-known/openid-configuration
+
+### Published keys
+# Answers 200 with the public half of each signing key (kty, n, e), never any private material.
+GET {{host}}/.well-known/jwks
+
+### Access token from the client credentials grant
+# Answers 200 with access_token, token_type Bearer and expires_in: a token for the client itself.
+POST {{host}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### Introspection of that token
+# The endpoint answers only an authenticated client, so the same client sends its own credentials; the
+# token was issued to it, so it needs no further permission. Answers 200 with "active": true and the
+# token's client_id and exp; an expired or unknown token answers 200 with "active": false.
+POST {{host}}/connect/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token={{accessToken}}&client_id={{clientId}}&client_secret={{clientSecret}}

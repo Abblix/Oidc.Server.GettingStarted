@@ -1,6 +1,7 @@
 using Abblix.DependencyInjection;
 using Abblix.Jwt;
 using Abblix.Oidc.Server.Common.Constants;
+using Abblix.Oidc.Server.Features;
 using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
@@ -49,6 +50,10 @@ builder.Services.AddOidcServices(options => options.Tenants.Add(new TenantDefini
     LoginUri = new Uri("/Auth/Login", UriKind.Relative),
     SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
 }));
+
+// Token introspection (RFC 7662) is opt-in: this call registers the endpoint and advertises it in discovery.
+// A client authenticates to it with its own credentials, as requests.http does with console_client.
+builder.Services.AddIntrospection();
 
 // Add authentication services
 builder.Services
