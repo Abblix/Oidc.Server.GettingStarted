@@ -17,7 +17,7 @@ From the `Oidc.Server.GettingStarted` root:
 - Open `https://localhost:5006/.well-known/openid-configuration` to see the discovery document.
 - `requests.http` runs the discovery, key set, client credentials token and introspection requests straight from Visual Studio, Rider or VS Code, with `console_client` as the caller.
 
-To point a client here instead of at the MVC provider, set its `Authority` to `https://localhost:5006`. That is enough for a client that only signs users in. A client that then calls `ApiSample` needs one more change: the API pins `ValidIssuer` and `Authority` to `https://localhost:5001` in its own `appsettings.Development.json`, so a token minted by this provider is rejected until those move too.
+To point a client here instead of at the MVC provider, set its `Authority` to `https://localhost:5006`. That is enough for a client that only signs users in. A client that then calls `ApiSample` needs one more change: the API reads its `Authority` (`https://localhost:5001`) from its own `appsettings.Development.json` and takes the signing keys from it, so a token minted by this provider is rejected until that `Authority` moves to `https://localhost:5006` too. Its `ValidIssuer` can stay as it is: the API also accepts the issuer of the discovery document it reads from the authority.
 
 The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `Program.cs`.
 
@@ -32,7 +32,7 @@ The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory
 
 Both providers are built on the same release of the library, so their discovery documents agree on every capability - the same algorithms, grants, response modes and scopes - and they carry the same resource and the same clients. What differs is the address, because the two run on different ports: the issuer and the endpoint URLs built on it. Read the two documents side by side if you ever doubt the rest - a difference in any other field means either the projects have drifted onto different package versions, or their tenant declarations have, since some of those fields are settings rather than build-time facts. They are not the same host: it has no HTTPS redirection, no static files and no home page, because none of that is what it exists to show, and `GET /` answers 404.
 
-One setting is worth knowing because it reaches other projects. Each provider declares its `Issuer`, and the server writes it into tokens and discovery exactly as configured, so a token minted here names `https://localhost:5006` - and ApiSample, pinned to the other address, rejects it until its own settings move. The issuer stays as configured whatever address the request arrived at, while the endpoint URLs in the discovery document are built from the request.
+One setting is worth knowing because it reaches other projects. Each provider declares its `Issuer`, and the server writes it into tokens and discovery exactly as configured, so a token minted here names `https://localhost:5006`. ApiSample accepts it once its `Authority` points here, because it takes the signing keys and an accepted issuer from this provider's discovery document. The issuer stays as configured whatever address the request arrived at, while the endpoint URLs in the discovery document are built from the request.
 
 ## The guides behind this sample
 
