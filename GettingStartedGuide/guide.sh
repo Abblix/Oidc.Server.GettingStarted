@@ -103,7 +103,10 @@ if [ -n "$nuget_source" ]; then
   # Resolved before the script moves into the new solution, so a relative path means the caller's one
   case "$nuget_source" in
     *://*) ;;
-    *) nuget_source="$(cd "$nuget_source" && pwd)" || fail "$nuget_source is not a folder" ;;
+    *)
+      resolved_source="$(cd "$nuget_source" && pwd)" || fail "$nuget_source is not a folder"
+      nuget_source="$resolved_source"
+      ;;
   esac
 fi
 
@@ -210,12 +213,16 @@ step="add Abblix.Oidc.Server.Mvc to OpenIDProviderApp"
   fi
 # bash 3.2 on macOS does not stop the script when a ( ... ) block fails under set -e
 ) || fail "dotnet add package exited with $?"
-"$python" - OpenIDProviderApp/obj/project.assets.json <<'PY'
+# NuGet takes a version it cannot find as a lower bound and installs the nearest higher one with only
+# a warning, so the version restored is read back and must be the one asked for
+"$python" - OpenIDProviderApp/obj/project.assets.json "$abblix_version" <<'PY' || fail "the restored Abblix.Oidc.Server.Mvc is not the one asked for"
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as file:
     libraries = json.load(file)["libraries"]
 versions = [name.split("/")[1] for name in libraries if name.split("/")[0].lower() == "abblix.oidc.server.mvc"]
-print(f"guide.sh: OpenIDProviderApp uses Abblix.Oidc.Server.Mvc {', '.join(versions)}")
+print(f"guide.sh: OpenIDProviderApp uses Abblix.Oidc.Server.Mvc {', '.join(versions) or 'of no version'}")
+asked = sys.argv[2].lower()
+sys.exit(len(versions) != 1 or (asked != "" and versions[0].lower() != asked))
 PY
 
 step="add Microsoft.AspNetCore.Authentication.OpenIdConnect to TestClientApp"
@@ -246,8 +253,8 @@ start_app() {
 }
 
 wait_for_app() {
-  local project="$1" url="$2" pid="$3"
-  for _ in $(seq 1 60); do
+  local project="$1" url="$2" pid="$3" deadline=$((SECONDS + 60))
+  while [ "$SECONDS" -lt "$deadline" ]; do
     if ! kill -0 "$pid" 2> /dev/null; then
       tail -n 40 "$project.log" >&2
       fail "$project exited; the end of its output is above"
@@ -292,7 +299,7 @@ wait_for_app TestClientApp https://localhost:5002/ "${app_pids[1]}"
 step="walk the flow"
 # The applications' output tells what the provider or the client refused; -u keeps the flow's own
 # lines in order with the failure line
-"$python" -u - <<'PY' || { tail -n 40 OpenIDProviderApp.log TestClientApp.log >&2; exit 1; }
+"$python" -u - <<'PY' || { tail -n 40 OpenIDProviderApp.log TestClientApp.log >&2; fail "the flow stopped; its reason and the end of both applications' output are above"; }
 import json, ssl, sys, urllib.error, urllib.parse, urllib.request
 from html.parser import HTMLParser
 from http.cookiejar import CookieJar
@@ -378,6 +385,8 @@ def visit(url, form=None):
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", "replace")
         fail(f"{error.geturl()} answered {error.code}: {body[:500]}")
+    except OSError as error:
+        fail(f"{url} could not be reached: {error}")
 
 
 def path_of(url):

@@ -99,7 +99,7 @@ The projects above carry more than the Getting Started guide builds, because oth
 bash GettingStartedGuide/guide.sh ../guide-run
 ```
 
-`--abblix-version <version>` installs that version of `Abblix.Oidc.Server.Mvc` instead of the latest, and `--nuget-source <folder or URL>` adds a package source next to nuget.org for it, so a build of the library can be tried against the guide before it is published. A workflow runs the script on every pull request.
+`--abblix-version <version>` installs that version of `Abblix.Oidc.Server.Mvc` instead of the latest, and `--nuget-source <folder or URL>` adds a package source next to nuget.org to take that version from, so a build of the library can be tried against the guide before it is published. A workflow runs the script on every pull request.
 
 ## 🛡️ About Abblix OIDC Server
 
