@@ -209,20 +209,19 @@ step="add Abblix.Oidc.Server.Mvc to OpenIDProviderApp"
     dotnet add package Abblix.Oidc.Server.Mvc
     # #endregion
   else
-    dotnet add package Abblix.Oidc.Server.Mvc --version "$abblix_version"
+    # A bare version is a lower bound, which NuGet meets with the nearest higher one and only a
+    # warning; the brackets make it exact, so a version missing from the sources fails here
+    dotnet add package Abblix.Oidc.Server.Mvc --version "[$abblix_version]"
   fi
 # bash 3.2 on macOS does not stop the script when a ( ... ) block fails under set -e
 ) || fail "dotnet add package exited with $?"
-# NuGet takes a version it cannot find as a lower bound and installs the nearest higher one with only
-# a warning, so the version restored is read back and must be the one asked for
-"$python" - OpenIDProviderApp/obj/project.assets.json "$abblix_version" <<'PY' || fail "the restored Abblix.Oidc.Server.Mvc is not the one asked for"
+"$python" - OpenIDProviderApp/obj/project.assets.json <<'PY' || fail "Abblix.Oidc.Server.Mvc was not restored exactly once"
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as file:
     libraries = json.load(file)["libraries"]
 versions = [name.split("/")[1] for name in libraries if name.split("/")[0].lower() == "abblix.oidc.server.mvc"]
 print(f"guide.sh: OpenIDProviderApp uses Abblix.Oidc.Server.Mvc {', '.join(versions) or 'of no version'}")
-asked = sys.argv[2].lower()
-sys.exit(len(versions) != 1 or (asked != "" and versions[0].lower() != asked))
+sys.exit(len(versions) != 1)
 PY
 
 step="add Microsoft.AspNetCore.Authentication.OpenIdConnect to TestClientApp"
