@@ -27,9 +27,7 @@
   </Target>
   <!-- Bundle Bootstrap into wwwroot/lib before every build. Incremental: skipped
        when the outputs are newer than the sources. -->
-  <Target Name="BuildClientAssets" BeforeTargets="Build" DependsOnTargets="EnsureClientDeps"
-          Inputs="$(ClientRoot)package.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts"
-          Outputs="wwwroot\lib\bootstrap-bundle.js;wwwroot\lib\bootstrap-bundle.css">
+  <Target Name="BuildClientAssets" BeforeTargets="Build" DependsOnTargets="EnsureClientDeps" Inputs="$(ClientRoot)package.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts" Outputs="wwwroot\lib\bootstrap-bundle.js;wwwroot\lib\bootstrap-bundle.css">
     <Exec WorkingDirectory="$(ClientRoot)" Command="npm run build" />
   </Target>
 </Project>

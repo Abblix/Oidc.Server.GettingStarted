@@ -33,10 +33,7 @@
        output is newer than the sources. -->
   <!-- SkipClientApp=true builds/runs the server alone (used once to bootstrap the OpenAPI schema the
        client generates its types from, before the client can build). -->
-  <Target Name="BuildClientApp" BeforeTargets="Build" DependsOnTargets="EnsureClientAppDeps"
-          Condition="'$(SkipClientApp)' != 'true'"
-          Inputs="@(ClientAppInputs)"
-          Outputs="wwwroot\auth\index.html">
+  <Target Name="BuildClientApp" BeforeTargets="Build" DependsOnTargets="EnsureClientAppDeps" Condition="'$(SkipClientApp)' != 'true'" Inputs="@(ClientAppInputs)" Outputs="wwwroot\auth\index.html">
     <Exec WorkingDirectory="$(ClientAppRoot)" Command="npm run build" />
   </Target>
 </Project>
