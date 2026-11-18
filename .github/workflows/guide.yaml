@@ -33,9 +33,9 @@ jobs:
           dotnet-version: '11.0.x'
         timeout-minutes: 3
 
-      # A line outside every region is one the guide cannot show, yet guide.sh would build it
-      - name: Every line of the guide's files can be shown
-        run: python3 GettingStartedGuide/check-regions.py
+      # A region that no longer has its place in the generated template cannot be put in by a reader
+      - name: Every region of the edited files has its place in the template
+        run: python3 GettingStartedGuide/guide-files.py check
         timeout-minutes: 3
 
       # Outside the checkout, so nothing of the repository's own build settings reaches the new projects

@@ -1,17 +1,23 @@
+using System.Diagnostics;
 // #region usings-logout
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 // #endregion
+// #region using-authorization
 using Microsoft.AspNetCore.Authorization;
+// #endregion
 using Microsoft.AspNetCore.Mvc;
+using TestClientApp.Models;
 
 namespace TestClientApp.Controllers;
 
 public class HomeController : Controller
 {
-    // #region index
+    // #region authorize
     [Authorize]
+    // #endregion
+    // #region index
     public IActionResult Index()
     {
         // Retrieve and pass the user's claims to the view
@@ -29,4 +35,15 @@ public class HomeController : Controller
         // #endregion
     }
     // #endregion
+
+    public IActionResult Privacy()
+    {
+        return View();
+    }
+
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult Error()
+    {
+        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+    }
 }

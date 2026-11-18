@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Follows the Getting Started guide from an empty directory: creates the solution and both projects,
-# adds the packages, writes every file the guide writes (copied from the folders next to this script,
-# the same files the guide's code blocks are taken from), builds, starts the provider and the client
+# adds the packages, writes the guide's files as a reader does (from the folders next to this script,
+# the same files the guide's code blocks are taken from: a file the guide shows whole is copied, one
+# it edits gets the guide's regions put into the generated file), builds, starts the provider and the client
 # and walks the flow a reader walks in the browser: discovery, sign-in as the demo user, the claims
 # page, sign-out. Exits non-zero naming the step that failed.
 #
@@ -11,7 +12,7 @@
 #                     needs --abblix-version, since otherwise nuget.org's latest release wins
 #   <directory>       where to create the solution; the current directory when omitted; must be empty
 #
-# Needs the .NET 11 SDK, Python 3 and the ports 5001 and 5002 free.
+# Needs the .NET 11 SDK, Python 3.9 or later and the ports 5001 and 5002 free.
 
 set -Eeuo pipefail
 
@@ -24,7 +25,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --abblix-version) abblix_version="${2:?--abblix-version needs a value}"; shift 2 ;;
     --nuget-source) nuget_source="${2:?--nuget-source needs a value}"; shift 2 ;;
-    -h|--help) sed -n '2,14p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}"; exit 0 ;;
     -*) echo "guide.sh: unknown option $1" >&2; exit 2 ;;
     *) work_dir="$1"; shift ;;
   esac
@@ -264,8 +265,7 @@ step="add Microsoft.AspNetCore.Authentication.OpenIdConnect to TestClientApp"
 ) || fail "dotnet add package exited with $?"
 
 step="write the files the guide writes"
-cp -R "$here/OpenIDProviderApp/." OpenIDProviderApp/
-cp -R "$here/TestClientApp/." TestClientApp/
+"$python" "$here/guide-files.py" apply .
 
 step="build"
 dotnet build
