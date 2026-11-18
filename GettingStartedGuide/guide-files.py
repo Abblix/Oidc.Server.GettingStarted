@@ -240,7 +240,10 @@ def put_files(solution, problems):
         if not generated.is_file():
             problems.append(f"{name}: the guide edits it, but dotnet new mvc generated no such file")
             continue
-        results[name] = place(name, read_lines(generated), read_lines(ROOT / name), problems)
+        # Each file is placed on its own, so one broken file does not hide the problems of the next
+        file_problems = []
+        results[name] = place(name, read_lines(generated), read_lines(ROOT / name), file_problems)
+        problems.extend(file_problems)
     return results
 
 
