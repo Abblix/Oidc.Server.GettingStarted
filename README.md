@@ -19,6 +19,7 @@
 ## Table of Contents
 - [About the Getting Started](#-about-the-getting-started)
 - [Run the loop with one command](#%EF%B8%8F-run-the-loop-with-one-command)
+- [Follow the guide with one command](#-follow-the-guide-with-one-command)
 - [About Abblix OIDC Server](#%EF%B8%8F-about-abblix-oidc-server)
 - [How to Build](#%EF%B8%8F-how-to-build)
 - [License](#-license)
@@ -87,6 +88,18 @@ Then walk through the loop in the browser:
 `--provider minimal` runs the same loop with `OpenIDProviderApp.MinimalApi` (`https://localhost:5006`) as the provider. The client and the API are pointed at it through environment variables for that run only, so their settings files stay as they are. It combines with `--check`, and a workflow runs the check with each provider on every pull request.
 
 The development certificate must be trusted (`dotnet dev-certs https --trust`), since the three call each other over HTTPS. On Linux, also add `$HOME/.aspnet/dev-certs/trust` to `SSL_CERT_DIR`, as that command explains.
+
+## 📜 Follow the guide with one command
+
+The projects above carry more than the Getting Started guide builds, because other samples need it. `GettingStartedGuide` holds what the guide itself writes and nothing else: each file the guide creates or replaces in its two projects, at the path the guide gives it. The guide's code blocks are taken from these files, so what you read is what gets built.
+
+`GettingStartedGuide/guide.sh` follows the guide from an empty directory: it creates the solution and both projects, adds the packages, copies those files in, builds, starts both applications and walks the flow the guide describes, from the discovery document through signing in and reading the claims to signing out. It stops with a non-zero exit code at the first step that fails and names it. It needs bash, the .NET 11 SDK, Python 3 and free ports 5001 and 5002:
+
+```shell
+bash GettingStartedGuide/guide.sh ../guide-run
+```
+
+`--abblix-version <version>` installs that version of `Abblix.Oidc.Server.Mvc` instead of the latest, and `--nuget-source <folder or URL>` adds a package source next to nuget.org, so a build of the library can be tried against the guide before it is published. A workflow runs the script on every pull request.
 
 ## 🛡️ About Abblix OIDC Server
 

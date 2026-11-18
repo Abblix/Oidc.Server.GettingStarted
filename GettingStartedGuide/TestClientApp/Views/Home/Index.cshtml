@@ -1,0 +1,20 @@
+@model IEnumerable<System.Security.Claims.Claim>
+@{
+    ViewData["Title"] = "User Claims";
+}
+
+<h2>User Claims</h2>
+
+@if (Model.Any())
+{
+    <ul>
+        @foreach (var claim in Model)
+        {
+            <li>@claim.Type: @claim.Value</li>
+        }
+    </ul>
+}
+else
+{
+    <p>No claims available. Are you authenticated?</p>
+}
