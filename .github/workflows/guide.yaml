@@ -36,5 +36,7 @@ jobs:
       # Outside the checkout, so nothing of the repository's own build settings reaches the new projects
       - name: Follow the guide
         run: bash GettingStartedGuide/guide.sh "$RUNNER_TEMP/guide"
-        timeout-minutes: 3
+        # A healthy run takes under a minute; the extra minute lets the script's own one-minute wait for
+        # an application that never answers end with its named step and log instead of the runner's kill
+        timeout-minutes: 4
     timeout-minutes: 5

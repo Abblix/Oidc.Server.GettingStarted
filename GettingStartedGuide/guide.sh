@@ -7,7 +7,8 @@
 #
 # Usage: guide.sh [--abblix-version <version>] [--nuget-source <path or URL>] [<empty directory>]
 #   --abblix-version  the Abblix.Oidc.Server.Mvc version to install instead of the latest one
-#   --nuget-source    a NuGet source to use besides nuget.org, such as a folder of freshly packed packages
+#   --nuget-source    a NuGet source to use besides nuget.org, such as a folder of freshly packed packages;
+#                     needs --abblix-version, since otherwise nuget.org's latest release wins
 #   <directory>       where to create the solution; the current directory when omitted; must be empty
 #
 # Needs the .NET 11 SDK, Python 3 and the ports 5001 and 5002 free.
@@ -23,7 +24,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --abblix-version) abblix_version="${2:?--abblix-version needs a value}"; shift 2 ;;
     --nuget-source) nuget_source="${2:?--nuget-source needs a value}"; shift 2 ;;
-    -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "${BASH_SOURCE[0]}"; exit 0 ;;
     -*) echo "guide.sh: unknown option $1" >&2; exit 2 ;;
     *) work_dir="$1"; shift ;;
   esac
@@ -94,6 +95,18 @@ for candidate in python3 python; do
 done
 [ -n "$python" ] || fail "Python 3.8 or later is not on PATH"
 
+if [ -n "$nuget_source" ]; then
+  step="check the NuGet source"
+  # dotnet add package takes only the latest stable version unless told which one, so a prerelease in
+  # the source would lose to nuget.org's release without a word
+  [ -n "$abblix_version" ] || fail "--nuget-source needs --abblix-version naming the package version to test"
+  # Resolved before the script moves into the new solution, so a relative path means the caller's one
+  case "$nuget_source" in
+    *://*) ;;
+    *) nuget_source="$(cd "$nuget_source" && pwd)" || fail "$nuget_source is not a folder" ;;
+  esac
+fi
+
 step="check the directory"
 mkdir -p "$work_dir"
 cd "$work_dir"
@@ -141,10 +154,6 @@ esac
 
 if [ -n "$nuget_source" ]; then
   step="add the NuGet source"
-  case "$nuget_source" in
-    *://*) ;;
-    *) nuget_source="$(cd "$nuget_source" && pwd)" ;;
-  esac
   # In Git Bash on Windows NuGet takes only a native Windows path for a folder source
   if command -v cygpath > /dev/null && [ "${nuget_source#*://}" = "$nuget_source" ]; then
     nuget_source="$(cygpath -w "$nuget_source")"
@@ -199,7 +208,15 @@ step="add Abblix.Oidc.Server.Mvc to OpenIDProviderApp"
   else
     dotnet add package Abblix.Oidc.Server.Mvc --version "$abblix_version"
   fi
-)
+# bash 3.2 on macOS does not stop the script when a ( ... ) block fails under set -e
+) || fail "dotnet add package exited with $?"
+"$python" - OpenIDProviderApp/obj/project.assets.json <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as file:
+    libraries = json.load(file)["libraries"]
+versions = [name.split("/")[1] for name in libraries if name.split("/")[0].lower() == "abblix.oidc.server.mvc"]
+print(f"guide.sh: OpenIDProviderApp uses Abblix.Oidc.Server.Mvc {', '.join(versions)}")
+PY
 
 step="add Microsoft.AspNetCore.Authentication.OpenIdConnect to TestClientApp"
 (
@@ -207,7 +224,7 @@ step="add Microsoft.AspNetCore.Authentication.OpenIdConnect to TestClientApp"
   # #region add-openidconnect-package
   dotnet add package Microsoft.AspNetCore.Authentication.OpenIdConnect
   # #endregion
-)
+) || fail "dotnet add package exited with $?"
 
 step="write the files the guide writes"
 cp -R "$here/OpenIDProviderApp/." OpenIDProviderApp/
@@ -230,7 +247,7 @@ start_app() {
 
 wait_for_app() {
   local project="$1" url="$2" pid="$3"
-  for _ in $(seq 1 120); do
+  for _ in $(seq 1 60); do
     if ! kill -0 "$pid" 2> /dev/null; then
       tail -n 40 "$project.log" >&2
       fail "$project exited; the end of its output is above"
@@ -240,8 +257,14 @@ import ssl, sys, urllib.error, urllib.request
 context = ssl.create_default_context()
 context.check_hostname = False
 context.verify_mode = ssl.CERT_NONE
-opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context))
-opener.handlers = [h for h in opener.handlers if not isinstance(h, urllib.request.HTTPRedirectHandler)]
+class NoRedirects(urllib.request.HTTPRedirectHandler):
+    """Takes a redirect as the answer: the client's challenge must not test the provider here."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), NoRedirects())
 try:
     opener.open(sys.argv[1], timeout=2)
 except urllib.error.HTTPError:
@@ -255,7 +278,7 @@ PY
     sleep 1
   done
   tail -n 40 "$project.log" >&2
-  fail "$project did not answer at $url within two minutes; the end of its output is above"
+  fail "$project did not answer at $url within a minute; the end of its output is above"
 }
 
 step="start OpenIDProviderApp"
@@ -267,7 +290,9 @@ start_app TestClientApp
 wait_for_app TestClientApp https://localhost:5002/ "${app_pids[1]}"
 
 step="walk the flow"
-"$python" - <<'PY'
+# The applications' output tells what the provider or the client refused; -u keeps the flow's own
+# lines in order with the failure line
+"$python" -u - <<'PY' || { tail -n 40 OpenIDProviderApp.log TestClientApp.log >&2; exit 1; }
 import json, ssl, sys, urllib.error, urllib.parse, urllib.request
 from html.parser import HTMLParser
 from http.cookiejar import CookieJar
