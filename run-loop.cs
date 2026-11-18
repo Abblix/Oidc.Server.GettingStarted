@@ -88,14 +88,25 @@ catch (StepFailed failure)
 }
 finally
 {
+    // One sample that cannot be stopped must not leave the others running
     foreach (var sample in samples)
-        sample.Stop();
+    {
+        try
+        {
+            sample.Stop();
+        }
+        catch (Exception failure)
+        {
+            Console.Error.WriteLine($"==> Could not stop {sample.Name}: {failure.Message}");
+        }
+    }
 }
 
 async Task DriveTheLoop()
 {
     // One browser: the cookies of all three hosts in one jar, redirects followed
-    using var browser = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() })
+    var cookies = new CookieContainer();
+    using var browser = new HttpClient(new HttpClientHandler { CookieContainer = cookies })
         { Timeout = TimeSpan.FromSeconds(30) };
 
     // The client's home page needs a signed-in user, so it sends the browser to the provider's login page
@@ -117,6 +128,23 @@ async Task DriveTheLoop()
     if (forecast.RootElement is not { ValueKind: JsonValueKind.Array } days || days.GetArrayLength() == 0)
         throw new StepFailed("The API answered without a forecast");
     Console.WriteLine($"==> The API answered with {days.GetArrayLength()} days of forecast");
+
+    // Cookies do not separate by port, so the provider's session cookie and the client's share one jar. Dropping
+    // only the client's shows the provider session is alive: the client gets a new sign-in without the login page.
+    // Without this, a sign-out that kept the provider session would end at the login page all the same.
+    var clientCookie = client.CookieName();
+    foreach (Cookie cookie in cookies.GetCookies(client.Address))
+    {
+        if (cookie.Name.StartsWith(clientCookie, StringComparison.Ordinal))
+            cookie.Expired = true;
+    }
+
+    if (cookies.GetCookies(client.Address).Any(cookie => cookie.Name.StartsWith(clientCookie, StringComparison.Ordinal)))
+        throw new StepFailed($"The client's {clientCookie} cookie could not be dropped");
+
+    using var signedInAgain = await browser.GetAsync(client.Address);
+    Expect(signedInAgain, client, "/", "Without its own cookie the client did not get a new sign-in from the provider's session");
+    Console.WriteLine("==> The provider's session signed the client in again without the login page");
 
     // Signing out ends the provider's session too, so the home page asks for a sign-in again
     using var signedOut = await browser.GetAsync(new Uri(client.Address, "/Home/EndSession"));
@@ -206,6 +234,18 @@ sealed class Sample
     public Uri Address { get; }
     public bool HasExited => _process?.HasExited ?? false;
     public Task Exited => _process?.WaitForExitAsync() ?? Task.CompletedTask;
+
+    /// <summary>
+    /// The name of the sample's session cookie, from the Cookies section its cookie handler binds.
+    /// </summary>
+    public string CookieName()
+    {
+        var appSettings = Path.Combine(Project, "appsettings.json");
+        using var settings = JsonDocument.Parse(File.ReadAllText(appSettings),
+            new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+        return settings.RootElement.GetProperty("Cookies").GetProperty("Cookie").GetProperty("Name").GetString()
+               ?? throw new InvalidOperationException($"{appSettings} has no Cookies:Cookie:Name");
+    }
 
     public void Start()
     {

@@ -7,7 +7,7 @@ TestClientApp is the Relying Party in the Getting Started constellation: a plain
 - Wiring a .NET app as an OpenID Connect client with a cookie session and the `OpenIdConnect` handler, bound from configuration rather than code.
 - The full round trip: an unauthenticated request is challenged, redirected to the provider to sign in, and returns to the app with an ID token and the user's claims.
 - Reading the signed-in user's claims in an MVC view.
-- Calling a protected API with the access token from the sign-in: the client asks for the `weather` scope of ApiSample (the `Resource` setting), so the token's audience is that API. A token minted for the API is refused by the provider's userinfo endpoint, so the profile and email claims come from the ID token instead.
+- Calling a protected API with the access token from the sign-in: the client asks for the `weather` scope of ApiSample (the `Resource` setting), so the token's audience is that API. A token minted for the API is refused by the provider's userinfo endpoint, so the profile and email claims come from the ID token instead. With `SaveTokens` on, that ID token, profile and email included, is sent back to the provider as `id_token_hint` in the sign-out address.
 
 It registers with the provider as `test_client`, redirect URI `https://localhost:5002/signin-oidc`.
 
