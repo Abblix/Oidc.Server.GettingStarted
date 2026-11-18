@@ -39,7 +39,7 @@ dotnet run --project McpServerSample/ProviderApp
 dotnet run --project McpServerSample/McpServerApp
 ```
 
-The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point a desktop or command-line MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser. It has to register with `application_type` `native`, as the MCP specification requires of it: a client registering as a web application is refused a `localhost` redirect. A client running inside a web page is not served: the registration endpoint and the MCP server answer no cross-origin requests. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
+The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point a desktop or command-line MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser. It has to register with `application_type` `native`, as the MCP specification requires of it: a client registering as a web application is refused a `localhost` redirect. The registration endpoint and the MCP server answer requests from the client application itself, so the client runs on the desktop or the command line rather than inside a web page. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
 
 A quick look without a client:
 
@@ -50,12 +50,6 @@ curl -k https://localhost:5007/.well-known/oauth-authorization-server
 ```
 
 The first returns `401` with the challenge, the second the resource metadata, and the third the provider's metadata with `registration_endpoint` and `code_challenge_methods_supported`.
-
-## What this provider does not do yet
-
-- A dynamically registered client gets a refresh token only when its authorization request carries `prompt=consent`. MCP clients ask for `offline_access` without it, and the provider then ignores that scope; a client configured for offline access would get one, but a client that registered itself cannot be configured that way. Such a client signs the user in again each time its access token expires.
-- The registration endpoint knows only the scopes declared on the tenant, not those declared on a resource, so `mcp:tools` is declared in both places. With the resource alone, an MCP client registering with that scope is refused with `Unknown scope`.
-- Client ID Metadata Documents, the registration mechanism the MCP specification now recommends over dynamic registration, are not supported. Clients that prefer them fall back to dynamic registration, which this provider offers.
 
 ## Before you take it further
 
