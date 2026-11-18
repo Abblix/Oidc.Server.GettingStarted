@@ -1,6 +1,6 @@
 # API Sample: a resource server protected by access tokens
 
-ApiSample is the protected resource in the constellation: a minimal ASP.NET Core Web API that accepts only requests carrying a valid access token with the `weather` scope. It has no login UI and no library code of its own; it validates the JWT the provider issued using the standard `JwtBearer` handler. It is the API that BffSample forwards to.
+ApiSample is the protected resource in the constellation: a minimal ASP.NET Core Web API that accepts only requests carrying a valid access token with the `weather` scope. It has no login UI and no library code of its own; it validates the JWT the provider issued using the standard `JwtBearer` handler. It is the API that BffSample forwards to and that TestClientApp calls.
 
 ## What it demonstrates
 
@@ -17,6 +17,8 @@ ApiSample validates tokens; it does not issue them, so it runs behind a provider
 - `dotnet run --project OpenIDProviderApp` starts the provider on `https://localhost:5001`.
 - `dotnet run --project ApiSample` starts this API on `https://localhost:5004`.
 - `dotnet run --project BffSample` starts the SPA and BFF that call it on `https://localhost:5003`.
+
+`dotnet run-loop.cs` from the root starts this API with the provider and TestClientApp, whose Call the API page calls it with the access token from the sign-in.
 
 In development, open `https://localhost:5004/swagger` to see the endpoint. A direct call to `https://localhost:5004/weatherforecast` without a bearer token returns `401`.
 
