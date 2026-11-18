@@ -82,7 +82,9 @@ Then walk through the loop in the browser:
 - Choose Call the API. The client sends its access token to `https://localhost:5004/weatherforecast` and shows the forecast the API returns. The token was requested for the API's `weather` scope, and the API accepts it only because the audience and scope match.
 - Go back and choose Logout. The client ends its own session and the provider's, so the next visit asks you to sign in again.
 
-`dotnet run-loop.cs --check` does the same walk without a browser and exits with a non-zero code at the first step that fails. A workflow runs it on every pull request.
+`dotnet run-loop.cs --check` does the same walk without a browser and exits with a non-zero code at the first step that fails.
+
+`--provider minimal` runs the same loop with `OpenIDProviderApp.MinimalApi` (`https://localhost:5006`) as the provider. The client and the API are pointed at it through environment variables for that run only, so their settings files stay as they are. It combines with `--check`, and a workflow runs the check with each provider on every pull request.
 
 The development certificate must be trusted (`dotnet dev-certs https --trust`), since the three call each other over HTTPS. On Linux, also add `$HOME/.aspnet/dev-certs/trust` to `SSL_CERT_DIR`, as that command explains.
 

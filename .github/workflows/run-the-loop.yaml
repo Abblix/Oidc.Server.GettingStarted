@@ -1,8 +1,8 @@
 name: Run the loop
 
-# Starts the provider, the API and the web client with the same command a reader runs, signs in as the demo
-# user, calls the API with the access token and signs out. A sample that no longer works with the others
-# turns this red.
+# Starts a provider, the API and the web client with the same command a reader runs, signs in as the demo
+# user, calls the API with the access token and signs out, once with each provider sample. A sample that no
+# longer works with the others turns this red.
 # Pull requests only: a fork's code runs here, so the job takes a GitHub-hosted runner rather than one that
 # persists between jobs, and the run already tests the tree the merge produces.
 on:
@@ -17,8 +17,13 @@ concurrency:
 
 jobs:
   loop:
-    name: Sign in, call the API, sign out
+    name: Sign in, call the API, sign out (${{ matrix.provider }})
     runs-on: ubuntu-latest
+    strategy:
+      # One provider failing says nothing about the other, so both runs finish
+      fail-fast: false
+      matrix:
+        provider: [mvc, minimal]
     permissions:
       contents: read
     steps:
@@ -50,9 +55,11 @@ jobs:
         timeout-minutes: 3
 
       - name: Run the loop
+        env:
+          PROVIDER: ${{ matrix.provider }}
         run: |
           export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs"
-          dotnet run-loop.cs --check
+          dotnet run-loop.cs --check --provider "$PROVIDER"
         # Restores, builds and starts three projects, which together outrun the usual 3-minute step ceiling
         timeout-minutes: 4
     timeout-minutes: 5

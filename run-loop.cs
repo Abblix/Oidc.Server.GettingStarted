@@ -1,8 +1,12 @@
-// Starts the provider (OpenIDProviderApp), the API (ApiSample) and the web client (TestClientApp) together.
+// Starts a provider, the API (ApiSample) and the web client (TestClientApp) together.
 //
 //   dotnet run-loop.cs           starts the three and keeps them running until Ctrl+C
 //   dotnet run-loop.cs --check   also signs in as the demo user, calls the API through the client and signs
 //                                out, then stops them; the exit code is non-zero if any step did not answer
+//
+//   --provider mvc               the provider is OpenIDProviderApp (the default)
+//   --provider minimal           the provider is OpenIDProviderApp.MinimalApi; the client and the API are
+//                                pointed at it through environment variables, their files stay as they are
 //
 // The addresses come from each project's launch profile, the same ones `dotnet run --project` uses.
 
@@ -15,20 +19,48 @@ using System.Web;
 var root = AppContext.GetData("EntryPointFileDirectoryPath") as string
            ?? throw new InvalidOperationException("Run this file with `dotnet run-loop.cs` from the SDK");
 
-var check = args switch
+const string usage = "Use none, --check, --provider mvc or --provider minimal, --check and --provider in any order.";
+var check = false;
+string? choice = null;
+for (var i = 0; i < args.Length; i++)
 {
-    [] => false,
-    ["--check"] => true,
-    _ => throw new ArgumentException($"Unknown arguments: {string.Join(' ', args)}. Use none or --check."),
+    switch (args[i])
+    {
+        case "--check" when !check:
+            check = true;
+            break;
+
+        case "--provider" when choice == null && i + 1 < args.Length:
+            choice = args[++i];
+            break;
+
+        default:
+            Console.Error.WriteLine($"==> Unknown arguments: {string.Join(' ', args)}. {usage}");
+            return 2;
+    }
+}
+
+// The client and the API are configured for OpenIDProviderApp, so only another provider needs them pointed at it.
+// Leaving them alone for that one keeps a wrong address in their own settings visible.
+var (providerName, pointAtProvider) = (choice ?? "mvc") switch
+{
+    "mvc" => ("OpenIDProviderApp", false),
+    "minimal" => ("OpenIDProviderApp.MinimalApi", true),
+    _ => (null, false),
 };
+if (providerName == null)
+{
+    Console.Error.WriteLine($"==> Unknown provider: {choice}. {usage}");
+    return 2;
+}
 
 // The provider first: the API and the client read its discovery document
-var provider = new Sample("OpenIDProviderApp", root);
+var provider = new Sample(providerName, root);
 var api = new Sample("ApiSample", root);
 var client = new Sample("TestClientApp", root);
 Sample[] samples = [provider, api, client];
 
-// The demo user OpenIDProviderApp registers in its Program.cs
+// The demo user both providers register in their Program.cs
 const string email = "john.doe@example.com";
 const string password = "Jd!2024$3cur3";
 
@@ -43,6 +75,17 @@ using var probe = new HttpClient(new HttpClientHandler { AllowAutoRedirect = fal
 
 try
 {
+    // Environment variables outrank appsettings.json, so they point the two at the provider without editing them.
+    // Its address is the issuer each provider declares in its Program.cs, written without the trailing slash
+    // the API compares the tokens' iss claim with.
+    var authority = provider.Address.GetLeftPart(UriPartial.Authority);
+    if (pointAtProvider)
+    {
+        client.Point(["OpenIdConnect", "Authority"], authority);
+        api.Point(["JwtBearerAuthentication", "Authority"], authority);
+        api.Point(["JwtBearerAuthentication", "TokenValidationParameters", "ValidIssuer"], authority);
+    }
+
     // A sample already listening would answer every step below with binaries this run did not build
     foreach (var sample in samples)
     {
@@ -72,7 +115,7 @@ try
     }
 
     await DriveTheLoop();
-    Console.WriteLine("==> The loop works: signed in, called the API with the access token, signed out");
+    Console.WriteLine($"==> The loop works with {provider.Name}: signed in, called the API with the access token, signed out");
     return 0;
 }
 // Ctrl+C reaches the build and the samples too, so whatever failed after it is the stop, not a defect
@@ -215,6 +258,7 @@ static void Run(string fileName, params string[] arguments)
 sealed class Sample
 {
     private const string Profile = "https";
+    private readonly Dictionary<string, string> _environment = [];
     private Process? _process;
 
     public Sample(string name, string root)
@@ -238,21 +282,47 @@ sealed class Sample
     /// <summary>
     /// The name of the sample's session cookie, from the Cookies section its cookie handler binds.
     /// </summary>
-    public string CookieName()
+    public string CookieName() => Setting(["Cookies", "Cookie", "Name"]);
+
+    /// <summary>
+    /// Overrides one of the sample's settings for this run through the environment variable configuration
+    /// reads it from. The setting must already be in its appsettings files: a renamed one would otherwise
+    /// leave the sample pointed elsewhere with nothing saying why.
+    /// </summary>
+    public void Point(string[] path, string value)
     {
-        var appSettings = Path.Combine(Project, "appsettings.json");
-        using var settings = JsonDocument.Parse(File.ReadAllText(appSettings),
-            new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-        return settings.RootElement.GetProperty("Cookies").GetProperty("Cookie").GetProperty("Name").GetString()
-               ?? throw new InvalidOperationException($"{appSettings} has no Cookies:Cookie:Name");
+        Setting(path);
+        _environment[string.Join("__", path)] = value;
+    }
+
+    private string Setting(string[] path)
+    {
+        // The Development file layers over the base one, so a setting may live in either
+        foreach (var file in new[] { "appsettings.Development.json", "appsettings.json" })
+        {
+            var appSettings = Path.Combine(Project, file);
+            if (!File.Exists(appSettings))
+                continue;
+
+            using var settings = JsonDocument.Parse(File.ReadAllText(appSettings),
+                new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var element = settings.RootElement;
+            if (path.All(key => element.TryGetProperty(key, out element)) && element.GetString() is { } value)
+                return value;
+        }
+
+        throw new StepFailed($"{Name} has no {string.Join(':', path)} in its appsettings files");
     }
 
     public void Start()
     {
         // The launch profile also sets the Development environment, where the client and the API find the provider
-        _process = Process.Start(new ProcessStartInfo("dotnet",
-                       ["run", "--project", Project, "--no-build", "--launch-profile", Profile]) { EnvironmentVariables = { ["DOTNET_NOLOGO"] = "1" } })
-                   ?? throw new StepFailed($"{Name} did not start");
+        var start = new ProcessStartInfo("dotnet", ["run", "--project", Project, "--no-build", "--launch-profile", Profile])
+            { EnvironmentVariables = { ["DOTNET_NOLOGO"] = "1" } };
+        foreach (var (name, value) in _environment)
+            start.EnvironmentVariables[name] = value;
+
+        _process = Process.Start(start) ?? throw new StepFailed($"{Name} did not start");
     }
 
     public void Stop()
