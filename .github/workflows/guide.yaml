@@ -1,0 +1,47 @@
+name: Follow the guide
+
+# Runs every step of the Getting Started guide from an empty directory with GettingStartedGuide/guide.sh:
+# creates both projects, adds the packages, writes the guide's files, signs in as the demo user, reads
+# the claims and signs out. The documentation site takes the guide's code from the same files, so a
+# change that breaks the guide turns this red.
+# Pull requests only: a fork's code runs here, so the job takes a GitHub-hosted runner rather than one that
+# persists between jobs, and the run already tests the tree the merge produces.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guide:
+    name: Follow the guide from an empty directory
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+        timeout-minutes: 3
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
+        with:
+          dotnet-version: '11.0.x'
+        timeout-minutes: 3
+
+      # A region that no longer has its place in the generated template cannot be put in by a reader
+      - name: Every region of the edited files has its place in the template
+        run: python3 GettingStartedGuide/guide-files.py check
+        timeout-minutes: 3
+
+      # Outside the checkout, so nothing of the repository's own build settings reaches the new projects
+      - name: Follow the guide
+        run: bash GettingStartedGuide/guide.sh "$RUNNER_TEMP/guide"
+        # A healthy run takes about a minute; the extra minutes let the script's own one-minute wait for
+        # an application that never answers end with its named step and log instead of the runner's kill
+        timeout-minutes: 4
+    timeout-minutes: 5
