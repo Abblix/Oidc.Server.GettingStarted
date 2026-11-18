@@ -51,12 +51,6 @@ curl -k https://localhost:5007/.well-known/oauth-authorization-server
 
 The first returns `401` with the challenge, the second the resource metadata, and the third the provider's metadata with `registration_endpoint` and `code_challenge_methods_supported`.
 
-## What this provider does not do yet
-
-- A dynamically registered client gets a refresh token only when its authorization request carries `prompt=consent`. MCP clients ask for `offline_access` without it, and the provider then ignores that scope; a client configured for offline access would get one, but a client that registered itself cannot be configured that way. Such a client signs the user in again each time its access token expires.
-- The registration endpoint knows only the scopes declared on the tenant, not those declared on a resource, so `mcp:tools` is declared in both places. With the resource alone, an MCP client registering with that scope is refused with `Unknown scope`.
-- Client ID Metadata Documents, the registration mechanism the MCP specification now recommends over dynamic registration, are not supported. Clients that prefer them fall back to dynamic registration, which this provider offers.
-
 ## Before you take it further
 
 - Consent is granted automatically (`AddConsentGrantedForEveryClient`). With open registration any application can become a client, so a real provider shows the user which client is asking and where it will send the code, through an `IUserConsentsProvider` of its own.
