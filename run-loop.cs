@@ -76,8 +76,8 @@ using var probe = new HttpClient(new HttpClientHandler { AllowAutoRedirect = fal
 try
 {
     // Environment variables outrank the appsettings files, so they point the two at the provider without editing
-    // them. The API's JwtBearer handler also accepts the issuer of the discovery document it reads from the
-    // authority, so its configured ValidIssuer needs no override.
+    // them. The API validates tokens against the discovery document it reads from the authority, whose issuer is
+    // accepted alongside the configured ValidIssuer, so that one needs no override.
     if (pointAtProvider)
     {
         var authority = provider.Address.GetLeftPart(UriPartial.Authority);
