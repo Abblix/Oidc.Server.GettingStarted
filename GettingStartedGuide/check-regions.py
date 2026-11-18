@@ -5,8 +5,8 @@ whole is one the reader edits: the template's file, with the guide's regions put
 regions such a file must be the `dotnet new mvc` file line for line, in the same order: a line the
 template lacks is one the reader is never told to write, and a template line missing here is one the
 reader keeps while guide.sh builds without it. A region is either new lines, or replaces the
-template's lines from the one its own first line repeats, as the guide tells the reader to replace
-that part.
+template's lines from the one its own first line repeats to the one its own last line repeats, as
+the guide tells the reader to replace that part.
 
 Region markers: a line that, stripped of its indentation, is `// #region <name>`, `# #region <name>`
 or `@* #region <name> *@` opens a region, and `// #endregion`, `# #endregion` or `@* #endregion *@`
@@ -51,6 +51,7 @@ class Region:
     def __init__(self, name):
         self.name = name
         self.first_line = None
+        self.last_line = None
 
     def __eq__(self, other):
         return isinstance(other, Region) and other.name == self.name
@@ -93,8 +94,10 @@ def outline(path, problems):
                 open_regions.pop()
         elif not open_regions:
             items.append(line)
-        elif isinstance(items[-1], Region) and items[-1].first_line is None and stripped:
-            items[-1].first_line = stripped
+        elif isinstance(items[-1], Region) and stripped:
+            if items[-1].first_line is None:
+                items[-1].first_line = line
+            items[-1].last_line = line
     for name in open_regions:
         problems.append(f"{name_of_file}: region '{name}' is never closed")
     return items
@@ -123,9 +126,12 @@ def compare_with_template(name, items, template, problems):
         written = [item for item in added if not isinstance(item, Region) and item.strip()]
         for line in written:
             problems.append(f"{name}: outside every region and not in the template here: {line.strip()}")
-        # A region replaces the template's lines from the one it starts with, as the guide tells the
-        # reader to replace that part; template lines before it, with no region starting there, are lost
-        if removed and not any(region.first_line == removed[0].strip() for region in regions):
+        # A region replaces the template's lines from the one it starts with to the one it ends with,
+        # indentation included, as the guide tells the reader to replace that part; any other template
+        # line missing here is one the reader keeps and guide.sh drops
+        if removed and not (regions
+                            and any(region.first_line == removed[0] for region in regions)
+                            and regions[-1].last_line == removed[-1]):
             for line in removed:
                 problems.append(f"{name}: the template's line is missing and no region replaces it: {line.strip()}")
 
