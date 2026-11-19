@@ -1,6 +1,7 @@
 using BlazorSample.Components;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -48,9 +49,11 @@ app.UseAntiforgery();
 // Sign-in and sign-out run on the plain HTTP pipeline, never inside an interactive circuit.
 // Writing the auth cookie and issuing the OIDC redirect both need the HTTP response, which
 // has already started once a Blazor Server component is interactive.
+// After sign-in the handler sends the browser to RedirectUri, so only a path on this app is taken from the
+// query; any other address returns to the home page.
 app.MapGet("/auth/login", (string? returnUrl) =>
     Results.Challenge(
-        new() { RedirectUri = returnUrl ?? "/" },
+        new() { RedirectUri = RedirectHttpResult.IsLocalUrl(returnUrl) ? returnUrl : "/" },
         [OpenIdConnectDefaults.AuthenticationScheme]));
 
 // Kept as GET for brevity in this sample. In production trigger sign-out from a POST form

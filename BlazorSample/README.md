@@ -5,7 +5,7 @@ BlazorSample is a Blazor Web App (interactive Server render mode) that signs in 
 ## What it demonstrates
 
 - A Blazor Server app as an OpenID Connect client using `Microsoft.AspNetCore.Authentication.OpenIdConnect` with a cookie session, the authorization code flow, and PKCE, bound from `appsettings.json` (the same shape as TestClientApp).
-- Sign-in and sign-out as minimal HTTP endpoints (`/auth/login`, `/auth/logout`) that `Challenge` and `SignOut`, because writing the auth cookie and issuing the OIDC redirect both need the HTTP response, which has already started once a component is interactive.
+- Sign-in and sign-out as minimal HTTP endpoints (`/auth/login`, `/auth/logout`) that `Challenge` and `SignOut`, because writing the auth cookie and issuing the OIDC redirect both need the HTTP response, which has already started once a component is interactive. After sign-in `/auth/login` returns the user to its `returnUrl` when that is a path on the app itself, and to the home page otherwise.
 - Exposing the signed-in user to components through `CascadingAuthenticationState` and `AuthorizeView`.
 - Pointing `Identity.Name` at the `name` claim (inbound claim mapping is off, so claims keep their short names).
 
@@ -17,6 +17,8 @@ From the `Oidc.Server.GettingStarted` root:
 
 - `dotnet run --project OpenIDProviderApp` starts the provider on `https://localhost:5001`. `AspNetIdentitySample` stands in for it on the same port.
 - `dotnet run --project BlazorSample` starts the Blazor app on `https://localhost:5005`.
+
+To sign in through `OpenIDProviderApp.MinimalApi` on `https://localhost:5006` instead, start the Blazor app with the environment variable `OpenIdConnect__Authority=https://localhost:5006`. It overrides the authority in `appsettings.Development.json` for that run, and the provider carries the same `blazor_sample` client.
 
 Open `https://localhost:5005` and sign in (with OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, create an account first with Create one on its sign-in screen). No Node.js is needed: this sample has no client-side bundling step.
 
