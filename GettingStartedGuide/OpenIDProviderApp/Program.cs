@@ -57,10 +57,6 @@ builder.Services
     .AddCookie();
 // #endregion
 
-// #region distributed-cache
-builder.Services.AddDistributedMemoryCache();
-// #endregion
-
 // #region pipeline
 var app = builder.Build();
 

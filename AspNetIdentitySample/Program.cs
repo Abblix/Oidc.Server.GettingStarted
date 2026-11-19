@@ -56,7 +56,6 @@ builder.Services.AddScoped<IUserInfoProvider, IdentityUserInfoProvider>();
 // A Minimal API host has no MVC, so the services the request pipeline and the auth UI rely on are
 // registered directly (the MVC host got these transitively from AddControllersWithViews).
 builder.Services.AddAuthorization();
-builder.Services.AddMemoryCache();
 
 // The React auth SPA posts JSON and echoes the antiforgery request token in this header; the auth
 // endpoints validate it against the paired HttpOnly cookie.
@@ -155,9 +154,6 @@ builder.Services
             }
         };
     });
-
-builder.Services
-    .AddDistributedMemoryCache();
 
 var app = builder.Build();
 

@@ -64,7 +64,6 @@ builder.Services.AddJwksKeyResolution(options =>
 // the transmitter's retry would then be answered 202 with nobody having seen the event. So a duplicate
 // reaches the sink again - RFC 8935 lets a transmitter redeliver whatever the earlier response was - and
 // idempotency in the sink is the only protection there is, rather than a second line behind this cache.
-builder.Services.AddDistributedMemoryCache();
 builder.Services.AddDistributedReplayCache();
 
 builder.Services.AddSharedSignalsReceiver(new SharedSignalsValidationOptions
