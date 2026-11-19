@@ -1,11 +1,11 @@
 using System.Net;
-using Abblix.DependencyInjection;
 using Abblix.Jwt;
+using Abblix.Oidc;
 using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
-using Abblix.Oidc.Server.Endpoints.DynamicClientManagement.Validation;
 using Abblix.Oidc.Server.Features;
+using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.RandomGenerators;
@@ -51,6 +51,20 @@ builder.Services.AddOidcServices(options =>
     // library's default asks for one.
     options.RequireInitialAccessToken = false;
 
+    options.NewClientOptions = new NewClientOptions
+    {
+        // Open registration would otherwise admit any grant type the server supports, client_credentials included,
+        // which gets a token for the MCP server with no user behind it. An MCP client acts for a user through the
+        // authorization code flow, renewed by refresh tokens, so a registration asking for anything else is refused.
+        AllowedGrantTypes = [GrantTypes.AuthorizationCode, GrantTypes.RefreshToken],
+
+        // An MCP client asks for offline_access to keep working after its access token expires, usually without
+        // prompt=consent, and a request without it has that scope ignored (OpenID Connect Core 1.0 section 11). This
+        // provider states for every client that registers that the user's consent, which the consent provider above
+        // reports, is enough, so the client gets its refresh token.
+        OfflineAccess = OfflineAccess.Allowed,
+    };
+
     options.Tenants.Add(new TenantDefinition
     {
         Id = "main",
@@ -61,13 +75,9 @@ builder.Services.AddOidcServices(options =>
 
         LoginUri = new Uri("/Auth/Login", UriKind.Relative),
 
-        // MCP clients register with the scope the MCP server's challenge names, and the registration endpoint
-        // knows only the tenant's own scopes, not those of its resources: declared on the resource alone,
-        // mcp:tools is refused at registration as an unknown scope.
-        Scopes = [new ScopeDefinition(mcpScope)],
-
         // The MCP server as a protected resource. A client naming it in the resource parameter gets an access
-        // token whose audience is exactly this URI, which is what the MCP server checks.
+        // token whose audience is exactly this URI, which is what the MCP server checks. MCP clients register with
+        // the scope the MCP server's challenge names, and registration accepts a scope a resource declares.
         Resources =
         [
             new ResourceDefinition(new Uri(mcpResource, UriKind.Absolute), new ScopeDefinition(mcpScope)),
@@ -81,19 +91,10 @@ builder.Services.AddOidcServices(options =>
 // call the provider has no registration endpoint at all.
 builder.Services.AddDynamicClientRegistration();
 
-// Open registration admits any grant type the server supports, client_credentials included, which would get a
-// token for the MCP server with no user behind it. This step, added to the end of the library's registration
-// pipeline, admits only the grants an MCP client acting for a user needs.
-builder.Services.Decompose<IClientRegistrationContextValidator>()
-    .AddLast(ServiceDescriptor.Singleton<IClientRegistrationContextValidator, UserGrantsOnlyValidator>());
-
 builder.Services.AddAuthentication().AddCookie();
 
 builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery();
-builder.Services.AddMemoryCache();
-builder.Services.AddDistributedMemoryCache();
-builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 
