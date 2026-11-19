@@ -295,7 +295,7 @@ app.Run();
 // Serves the built React SPA (wwwroot/auth) and issues the antiforgery request token in a JS-readable
 // cookie. The SPA echoes it in the X-CSRF-TOKEN header on every POST; a server-rendered form did this
 // with a hidden field, but a SPA has to perform the handshake explicitly.
-static async Task<IResult> ServeAuthSpa(IAntiforgery antiforgery, HttpContext http, IWebHostEnvironment environment)
+static IResult ServeAuthSpa(IAntiforgery antiforgery, HttpContext http, IWebHostEnvironment environment)
 {
     var tokens = antiforgery.GetAndStoreTokens(http);
     http.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
@@ -306,8 +306,11 @@ static async Task<IResult> ServeAuthSpa(IAntiforgery antiforgery, HttpContext ht
         Path = "/",
     });
 
-    var indexHtml = System.IO.Path.Combine(environment.WebRootPath, "auth", "index.html");
-    return Results.Content(await File.ReadAllTextAsync(indexHtml), "text/html");
+    // Read through the web root's file provider, as UseStaticFiles serves the SPA's scripts: started from the
+    // build output in Development, the app has no wwwroot folder of its own and reaches the project's through
+    // that provider
+    var indexHtml = environment.WebRootFileProvider.GetFileInfo("auth/index.html");
+    return Results.Stream(indexHtml.CreateReadStream(), "text/html");
 }
 
 // A JSON POST to a Minimal API endpoint gets no automatic antiforgery, so validate the header token
