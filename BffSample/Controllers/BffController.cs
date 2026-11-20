@@ -21,7 +21,8 @@ public class BffController : Controller
             return Unauthorized();
 
         // A JSON array in the ID token (amr, or a multi-valued custom claim) arrives as one claim per element, so
-        // claims are grouped by type: a single value stays a string, several become an array.
+        // claims are grouped by type: a single value comes back as a string, several as an array. An array of one
+        // element therefore reads as a string.
         return User.Claims
             .GroupBy(claim => claim.Type)
             .ToDictionary(
