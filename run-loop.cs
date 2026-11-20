@@ -10,11 +10,15 @@
 //
 // The addresses come from each project's launch profile, the same ones `dotnet run --project` uses.
 
+#:package AngleSharp@1.9.1
+
 using System.Diagnostics;
 using System.Net;
 using System.Security.Authentication;
 using System.Text.Json;
 using System.Web;
+using AngleSharp.Html.Dom;
+using AngleSharp.Html.Parser;
 
 var root = AppContext.GetData("EntryPointFileDirectoryPath") as string
            ?? throw new InvalidOperationException("Run this file with `dotnet run-loop.cs` from the SDK");
@@ -157,9 +161,21 @@ async Task DriveTheLoop()
     var requestUri = HttpUtility.ParseQueryString(loginPage.RequestMessage!.RequestUri!.Query)["request_uri"]
                      ?? throw new StepFailed("The provider's login page was opened without a request_uri");
 
-    // Signing in resumes the authorization request, and the client redeems the code it gets back
-    using var signedIn = await browser.PostAsync(new Uri(provider.Address, "/Auth/Login"), new FormUrlEncodedContent(
+    // Signing in resumes the authorization request, and the client redeems the code it gets back. The form is
+    // posted with every field the page put in it, as a browser does: the request_uri and the antiforgery token.
+    var login = await FormOf(loginPage, "/Auth/Login");
+    if (login.Fields.GetValueOrDefault("requestUri") != requestUri)
+        throw new StepFailed("The provider's login form does not carry the request_uri of its address");
+
+    // A page on another site posts only what it knows: the credentials and a request_uri, no antiforgery token.
+    // The provider must not sign the browser in on that, so the post ends on its login page, not at the client.
+    using var forgedLogin = await browser.PostAsync(login.Action, new FormUrlEncodedContent(
         new Dictionary<string, string> { ["email"] = email, ["password"] = password, ["requestUri"] = requestUri }));
+    Expect(forgedLogin, provider, "/Auth/Login", "A login post without the antiforgery token was not refused");
+    Console.WriteLine("==> A login post without the antiforgery token was refused");
+
+    using var signedIn = await browser.PostAsync(login.Action, new FormUrlEncodedContent(
+        new Dictionary<string, string>(login.Fields) { ["email"] = email, ["password"] = password }));
     Expect(signedIn, client, "/", "Signing in did not return to the client's home page");
     Console.WriteLine("==> Signed in");
 
@@ -188,10 +204,39 @@ async Task DriveTheLoop()
     Expect(signedInAgain, client, "/", "Without its own cookie the client did not get a new sign-in from the provider's session");
     Console.WriteLine("==> The provider's session signed the client in again without the login page");
 
-    // Signing out ends the provider's session too, so the home page asks for a sign-in again
-    using var signedOut = await browser.GetAsync(new Uri(client.Address, "/Home/EndSession"));
+    // Signing out ends the provider's session too, so the home page asks for a sign-in again. It is the form on
+    // the client's pages, posted with its antiforgery token.
+    var logout = await FormOf(signedInAgain, "/Home/EndSession");
+
+    // A post from another site carries no antiforgery token, and the client must refuse it rather than sign out
+    using var forgedLogout = await browser.PostAsync(logout.Action, new FormUrlEncodedContent([]));
+    if (forgedLogout.StatusCode != HttpStatusCode.BadRequest)
+        throw new StepFailed($"A sign-out post without the antiforgery token answered {(int)forgedLogout.StatusCode}, not 400");
+    Console.WriteLine("==> A sign-out post without the antiforgery token was refused");
+
+    using var signedOut = await browser.PostAsync(logout.Action, new FormUrlEncodedContent(logout.Fields));
     Expect(signedOut, provider, "/Auth/Login", "Signing out did not end at the provider's login page");
     Console.WriteLine("==> Signed out");
+}
+
+// The form on the page that posts to the path, with the address it posts to and the value of every named input
+static async Task<(Uri Action, Dictionary<string, string> Fields)> FormOf(HttpResponseMessage page, string path)
+{
+    var address = page.RequestMessage!.RequestUri!;
+    var document = await new HtmlParser().ParseDocumentAsync(await page.Content.ReadAsStringAsync());
+    foreach (var form in document.Forms)
+    {
+        var action = new Uri(address, form.GetAttribute("action") ?? "");
+        if (!string.Equals(action.AbsolutePath, path, StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        var fields = form.Elements.OfType<IHtmlInputElement>()
+            .Where(input => !string.IsNullOrEmpty(input.Name))
+            .ToDictionary(input => input.Name!, input => input.Value);
+        return (action, fields);
+    }
+
+    throw new StepFailed($"The page at {address} has no form that posts to {path}");
 }
 
 static void Expect(HttpResponseMessage response, Sample host, string path, string failure)

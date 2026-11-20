@@ -19,16 +19,25 @@
     <None Remove="$(SpaRoot)**" />
     <None Include="$(SpaRoot)**" Exclude="$(SpaRoot)node_modules\**" />
   </ItemGroup>
-  <Target Name="DebugEnsureNodeEnv" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' And !Exists('$(SpaRoot)node_modules') ">
+  <!-- Restore npm packages whenever package-lock.json is newer than the copy npm keeps in node_modules: a fresh clone, or a pull that changed the lock. -->
+  <Target Name="DebugEnsureNodeEnv" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' " Inputs="$(SpaRoot)package-lock.json" Outputs="$(SpaRoot)node_modules\.package-lock.json">
     <Exec Command="node --version" ContinueOnError="true">
       <Output TaskParameter="ExitCode" PropertyName="ErrorCode" />
     </Exec>
     <Error Condition="'$(ErrorCode)' != '0'" Text="Node.js is required to build and run this project. To continue, please install Node.js from https://nodejs.org/, and then restart your command prompt or IDE." />
     <Message Importance="high" Text="Restoring dependencies using 'npm'. This may take several minutes..." />
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <!-- npm ci installs exactly what package-lock.json records and fails when package.json no longer matches
+         it, so a version range never quietly pulls in a newer release. A compromised new release of any
+         package, even one several levels down, would otherwise run its install scripts on the machine of
+         everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
   </Target>
   <Target Name="PublishRunWebpack" AfterTargets="ComputeFilesToPublish">
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <!-- npm ci installs exactly what package-lock.json records and fails when package.json no longer matches
+         it, so a version range never quietly pulls in a newer release. A compromised new release of any
+         package, even one several levels down, would otherwise run its install scripts on the machine of
+         everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
     <ItemGroup>
       <DistFiles Include="$(SpaRoot)dist\**" />

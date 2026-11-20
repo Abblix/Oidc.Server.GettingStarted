@@ -11,8 +11,8 @@ namespace ProviderApp;
 /// <remarks>
 /// Registration here is open, so without this step anybody could register a client_credentials client and get an
 /// access token for the MCP server with no user behind it, and the tools would run for nobody in particular. MCP
-/// clients act for a user through the authorization code flow, renewed by refresh tokens, so nothing else is
-/// admitted.
+/// clients act for a user through the authorization code flow, renewed by refresh tokens when they ask for
+/// offline_access with prompt=consent, so nothing else is admitted.
 /// </remarks>
 public sealed class UserGrantsOnlyValidator : SyncClientRegistrationContextValidator
 {

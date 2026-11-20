@@ -16,9 +16,12 @@
             }
         </ul>
 
-        @* data-enhance-nav="false" forces a real browser navigation so the redirect that
-           clears the cookie is followed by the browser, not by enhanced navigation. *@
-        <p><a href="/auth/logout" data-enhance-nav="false">Sign out</a></p>
+        @* data-enhance="false" makes this a real browser form post, so the redirect that
+           clears the cookie is followed by the browser, not by enhanced form handling. *@
+        <form method="post" action="/auth/logout" data-enhance="false">
+            <AntiforgeryToken />
+            <button type="submit">Sign out</button>
+        </form>
     </Authorized>
     <NotAuthorized>
         <p>You are not signed in.</p>

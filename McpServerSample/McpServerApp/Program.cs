@@ -6,9 +6,11 @@ using ModelContextProtocol.AspNetCore.Authentication;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
-var resource = new Uri(configuration["Mcp:Resource"]!);
-var authorizationServer = configuration["Mcp:AuthorizationServer"]!;
-var scope = configuration["Mcp:Scope"]!;
+var resource = new Uri(configuration["Mcp:Resource"]
+                       ?? throw new InvalidOperationException("Mcp:Resource is not configured"));
+var authorizationServer = configuration["Mcp:AuthorizationServer"]
+                          ?? throw new InvalidOperationException("Mcp:AuthorizationServer is not configured");
+var scope = configuration["Mcp:Scope"] ?? throw new InvalidOperationException("Mcp:Scope is not configured");
 
 // RFC 9728 section 3: the metadata lives at the resource identifier with /.well-known/oauth-protected-resource
 // inserted between the host and the path, so https://localhost:5008/mcp publishes it at

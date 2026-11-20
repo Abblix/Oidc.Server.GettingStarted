@@ -1,6 +1,7 @@
 import React from 'react';
 import './App.css';
-import { BffProvider, useBff } from './components/Bff';
+import { BffProvider } from './components/Bff';
+import { useBff } from './components/useBff';
 import { UserClaims } from './components/UserClaims';
 import { WeatherForecast } from "./components/WeatherForecast";
 

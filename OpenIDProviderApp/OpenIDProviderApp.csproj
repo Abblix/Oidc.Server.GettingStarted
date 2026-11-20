@@ -17,17 +17,21 @@
     <None Remove="$(ClientRoot)**" />
     <None Include="$(ClientRoot)**" Exclude="$(ClientRoot)node_modules\**" />
   </ItemGroup>
-  <!-- Restore npm packages when node_modules is missing (fresh clone / CI). -->
-  <Target Name="EnsureClientDeps" Condition="!Exists('$(ClientRoot)node_modules')">
+  <!-- Restore npm packages whenever package-lock.json is newer than the copy npm keeps in node_modules: a fresh clone, or a pull that changed the lock. -->
+  <Target Name="EnsureClientDeps" Inputs="$(ClientRoot)package-lock.json" Outputs="$(ClientRoot)node_modules\.package-lock.json">
     <Exec Command="node --version" ContinueOnError="true">
       <Output TaskParameter="ExitCode" PropertyName="NodeExitCode" />
     </Exec>
     <Error Condition="'$(NodeExitCode)' != '0'" Text="Node.js is required to build this project. Install it from https://nodejs.org/ and restart your terminal or IDE." />
-    <Exec WorkingDirectory="$(ClientRoot)" Command="npm install" />
+    <!-- npm ci installs exactly what package-lock.json records and fails when package.json no longer matches
+         it, so a version range never quietly pulls in a newer release. A compromised new release of any
+         package, even one several levels down, would otherwise run its install scripts on the machine of
+         everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(ClientRoot)" Command="npm ci" />
   </Target>
   <!-- Bundle Bootstrap into wwwroot/lib before every build. Incremental: skipped
        when the outputs are newer than the sources. -->
-  <Target Name="BuildClientAssets" BeforeTargets="Build" DependsOnTargets="EnsureClientDeps" Inputs="$(ClientRoot)package.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts" Outputs="wwwroot\lib\bootstrap-bundle.js;wwwroot\lib\bootstrap-bundle.css">
+  <Target Name="BuildClientAssets" BeforeTargets="Build" DependsOnTargets="EnsureClientDeps" Inputs="$(ClientRoot)package.json;$(ClientRoot)package-lock.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts" Outputs="wwwroot\lib\bootstrap-bundle.js;wwwroot\lib\bootstrap-bundle.css">
     <Exec WorkingDirectory="$(ClientRoot)" Command="npm run build" />
   </Target>
 </Project>

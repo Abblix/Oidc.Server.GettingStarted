@@ -12,7 +12,7 @@ The SPA never calls the provider or the API directly. It calls its own origin, u
 
 - `GET /bff/check_session`: returns the current user's claims, or `401` when there is no session. The SPA calls this on load to decide whether to render or to redirect to login.
 - `GET /bff/login`: starts the authorization-code flow (`Challenge`), then returns to the SPA.
-- `POST /bff/logout`: clears the session cookie.
+- `GET /bff/logout`: signs out of the BFF, clearing the session cookie, and of the provider: the browser is sent to the provider's end-session endpoint and back to the SPA. The SPA navigates here rather than fetching it, because only a navigation can follow those redirects.
 - `GET /bff/{**catch-all}`: reverse-proxies to the protected API (`/bff/weatherforecast` reaches the weather API), attaching the access token as a `Bearer` header. The token is read from the session, so the browser never sees it.
 
 The forwarding is done with [YARP](https://microsoft.github.io/reverse-proxy/); the SPA dev server is launched and proxied in development by `Microsoft.AspNetCore.SpaProxy`.

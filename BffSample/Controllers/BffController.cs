@@ -14,13 +14,20 @@ public class BffController : Controller
 
     [HttpGet("check_session")]
     [EnableCors(CorsPolicyName)]
-    public ActionResult<IDictionary<string, string>> CheckSession()
+    public ActionResult<IDictionary<string, object>> CheckSession()
     {
         // return 401 Unauthorized to force SPA redirection to Login endpoint
         if (User.Identity?.IsAuthenticated != true)
             return Unauthorized();
 
-        return User.Claims.ToDictionary(claim => claim.Type, claim => claim.Value);
+        // A JSON array in the ID token (amr, or a multi-valued custom claim) arrives as one claim per element, so
+        // claims are grouped by type: a single value comes back as a string, several as an array. An array of one
+        // element therefore reads as a string.
+        return User.Claims
+            .GroupBy(claim => claim.Type)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Count() == 1 ? (object)group.Single().Value : group.Select(claim => claim.Value).ToArray());
     }
 
     [HttpGet("login")]

@@ -17,10 +17,6 @@ var builder = WebApplication.CreateBuilder(args);
 // still requires an IUserInfoProvider, so a no-op satisfies it (it is never invoked here).
 builder.Services.AddScoped<IUserInfoProvider, NoUserInfoProvider>();
 
-// The OIDC endpoints carry CORS metadata (discovery and JWKS are cross-origin by design), so the CORS
-// middleware must be present even with no custom policy.
-builder.Services.AddCors();
-
 // The server does not start until the host says how end-user consent is obtained. With no users there is no one
 // to ask, and the only client is this sample's own, so granting every client what it asks for is the choice.
 builder.Services.AddConsentGrantedForEveryClient();

@@ -43,6 +43,11 @@ public class HomeController(IHttpClientFactory httpClientFactory, IConfiguration
         };
     }
 
+    // Signing out changes state, so it takes a form post with an antiforgery token. As a GET, a link or a redirect
+    // on any other site would sign the user out of this client and of the provider behind it, because the browser
+    // sends the session cookie along on such a top-level navigation.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public IActionResult EndSession()
     {
         return SignOut(

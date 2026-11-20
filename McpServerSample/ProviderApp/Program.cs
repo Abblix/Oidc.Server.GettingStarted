@@ -13,6 +13,7 @@ using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.MinimalApi;
 using Abblix.Oidc.Server.Model;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using ProviderApp;
@@ -20,6 +21,13 @@ using UriBuilder = Abblix.Utils.UriBuilder;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
+
+var issuer = configuration["Provider:Issuer"]
+             ?? throw new InvalidOperationException("Provider:Issuer is not configured");
+var mcpResource = configuration["McpServer:Resource"]
+                  ?? throw new InvalidOperationException("McpServer:Resource is not configured");
+var mcpScope = configuration["McpServer:Scope"]
+               ?? throw new InvalidOperationException("McpServer:Scope is not configured");
 
 var userStore = new TestUserStore(
     new TestUser(
@@ -46,7 +54,7 @@ builder.Services.AddOidcServices(options =>
     options.Tenants.Add(new TenantDefinition
     {
         Id = "main",
-        Issuer = new Uri(configuration["Provider:Issuer"]!),
+        Issuer = new Uri(issuer),
 
         // No pre-registered clients: every MCP client arrives through dynamic registration
         Clients = [],
@@ -56,15 +64,13 @@ builder.Services.AddOidcServices(options =>
         // MCP clients register with the scope the MCP server's challenge names, and the registration endpoint
         // knows only the tenant's own scopes, not those of its resources: declared on the resource alone,
         // mcp:tools is refused at registration as an unknown scope.
-        Scopes = [new ScopeDefinition(configuration["McpServer:Scope"]!)],
+        Scopes = [new ScopeDefinition(mcpScope)],
 
         // The MCP server as a protected resource. A client naming it in the resource parameter gets an access
         // token whose audience is exactly this URI, which is what the MCP server checks.
         Resources =
         [
-            new ResourceDefinition(
-                new Uri(configuration["McpServer:Resource"]!, UriKind.Absolute),
-                new ScopeDefinition(configuration["McpServer:Scope"]!)),
+            new ResourceDefinition(new Uri(mcpResource, UriKind.Absolute), new ScopeDefinition(mcpScope)),
         ],
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
@@ -84,7 +90,7 @@ builder.Services.Decompose<IClientRegistrationContextValidator>()
 builder.Services.AddAuthentication().AddCookie();
 
 builder.Services.AddAuthorization();
-builder.Services.AddCors();
+builder.Services.AddAntiforgery();
 builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
@@ -97,21 +103,37 @@ app.UseAuthorization();
 
 app.MapOidcEndpoints();
 
-app.MapGet("/Auth/Login", (string request_uri) =>
-    Results.Content(LoginPage(request_uri, error: null), "text/html"));
+app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
+    Results.Content(LoginPage(antiforgery.GetAndStoreTokens(context), request_uri, error: null), "text/html"));
 
 app.MapPost("/Auth/Login", async (
         [FromForm] string email,
         [FromForm] string password,
-        [FromForm] string requestUri,
+        [FromForm] string? requestUri,
+        IAntiforgery antiforgery,
+        HttpContext context,
         IAuthSessionService authService,
         IOidcEndpointResolver endpointResolver,
         ISessionIdGenerator sessionIdGenerator,
         TimeProvider timeProvider,
         TestUserStore userStore) =>
     {
+        // A page on another site could submit this form with the attacker's own credentials: the victim's browser
+        // would be signed in as the attacker, and the MCP client the victim then authorizes acts on the attacker's
+        // account. The antiforgery token the form carries is what such a page cannot supply. A form opened in
+        // another tab before signing in carries a token that no longer matches, so it is shown again.
+        if (!await antiforgery.IsRequestValidAsync(context))
+        {
+            var fresh = antiforgery.GetAndStoreTokens(context);
+            return Results.Content(LoginPage(fresh, requestUri, "The sign-in form has expired, please sign in again"),
+                "text/html");
+        }
+
         if (!userStore.TryAuthenticate(email, password, out var subject))
-            return Results.Content(LoginPage(requestUri, "Invalid username or password"), "text/html");
+        {
+            var tokens = antiforgery.GetAndStoreTokens(context);
+            return Results.Content(LoginPage(tokens, requestUri, "Invalid username or password"), "text/html");
+        }
 
         var authSession = new AuthSession(
             subject,
@@ -121,20 +143,25 @@ app.MapPost("/Auth/Login", async (
 
         await authService.SignInAsync(authSession);
 
+        // A visit to the login page on its own carries no authorization request to resume, and this host has no
+        // page of its own to return to
+        if (string.IsNullOrEmpty(requestUri))
+            return Results.Content(SignedInPage(), "text/html");
+
         // Back to the authorization endpoint, which resumes the pending request and redirects to the MCP client
         var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
             { Query = { [AuthorizationRequest.Parameters.RequestUri] = requestUri } };
         return Results.Redirect(authorizeUrl);
     })
-    // The form carries a single-use request_uri that binds the post back to the pending
-    // authorization request, so the standard antiforgery token adds nothing here
+    // The handler checks the antiforgery token itself, so an expired form gets the login page again
+    // rather than the bare 400 the automatic check answers
     .DisableAntiforgery();
 
 app.Run();
 
-static string LoginPage(string requestUri, string? error)
+static string LoginPage(AntiforgeryTokenSet tokens, string? requestUri, string? error)
 {
-    var encodedRequestUri = WebUtility.HtmlEncode(requestUri);
+    var encodedRequestUri = WebUtility.HtmlEncode(requestUri ?? "");
     var errorBlock = error == null ? "" : $"<p style=\"color:red\">{WebUtility.HtmlEncode(error)}</p>";
     return $"""
         <!DOCTYPE html>
@@ -144,6 +171,7 @@ static string LoginPage(string requestUri, string? error)
             <h1>Login</h1>
             {errorBlock}
             <form method="post" action="/Auth/Login">
+                <input type="hidden" name="{WebUtility.HtmlEncode(tokens.FormFieldName)}" value="{WebUtility.HtmlEncode(tokens.RequestToken)}" />
                 <input type="hidden" name="requestUri" value="{encodedRequestUri}" />
                 <p><label>Email: <input type="email" name="email" autofocus /></label></p>
                 <p><label>Password: <input type="password" name="password" /></label></p>
@@ -153,3 +181,14 @@ static string LoginPage(string requestUri, string? error)
         </html>
         """;
 }
+
+static string SignedInPage() => """
+    <!DOCTYPE html>
+    <html>
+    <head><title>McpServerSample provider</title></head>
+    <body>
+        <h1>Signed in</h1>
+        <p>Connect an MCP client to continue: it sends you here when it needs a sign-in.</p>
+    </body>
+    </html>
+    """;

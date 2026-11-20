@@ -1,26 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode, FC } from 'react';
-
-type UserClaims = Record<string, unknown>;
-
-// Define the shape of the BFF context
-interface BffContextProps {
-    user: UserClaims | null;
-    sessionError: string | null;
-    fetchBff: (endpoint: string, options?: RequestInit) => Promise<Response>;
-    checkSession: () => Promise<void>;
-    login: () => void;
-    logout: () => void;
-}
-
-// Creating a context for BFF to share state and functions across the application
-const BffContext = createContext<BffContextProps>({
-    user: null,
-    sessionError: null,
-    fetchBff: async () => new Response(),
-    checkSession: async () => {},
-    login: () => {},
-    logout: () => {}
-});
+import { useCallback, useEffect, useState, ReactNode, FC } from 'react';
+import { BffContext, type UserClaims } from './useBff';
 
 interface BffProviderProps {
     baseUrl: string;
@@ -106,6 +85,3 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
         </BffContext.Provider>
     );
 };
-
-// Custom hook to use the BFF context easily in other components
-export const useBff = (): BffContextProps => useContext(BffContext);

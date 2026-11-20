@@ -19,15 +19,19 @@
     <Content Remove="$(ClientAppRoot)**" />
     <None Remove="$(ClientAppRoot)**" />
     <None Include="$(ClientAppRoot)**" Exclude="$(ClientAppRoot)node_modules\**;$(ClientAppRoot)dist\**" />
-    <ClientAppInputs Include="$(ClientAppRoot)src\**\*;$(ClientAppRoot)index.html;$(ClientAppRoot)package.json;$(ClientAppRoot)vite.config.ts" />
+    <ClientAppInputs Include="$(ClientAppRoot)src\**\*;$(ClientAppRoot)index.html;$(ClientAppRoot)package.json;$(ClientAppRoot)package-lock.json;$(ClientAppRoot)vite.config.ts" />
   </ItemGroup>
-  <!-- Restore npm packages when node_modules is missing (fresh clone / CI). -->
-  <Target Name="EnsureClientAppDeps" Condition="!Exists('$(ClientAppRoot)node_modules')">
+  <!-- Restore npm packages whenever package-lock.json is newer than the copy npm keeps in node_modules: a fresh clone, or a pull that changed the lock. -->
+  <Target Name="EnsureClientAppDeps" Inputs="$(ClientAppRoot)package-lock.json" Outputs="$(ClientAppRoot)node_modules\.package-lock.json">
     <Exec Command="node --version" ContinueOnError="true">
       <Output TaskParameter="ExitCode" PropertyName="NodeAppExitCode" />
     </Exec>
     <Error Condition="'$(NodeAppExitCode)' != '0'" Text="Node.js is required to build this project. Install it from https://nodejs.org/ and restart your terminal or IDE." />
-    <Exec WorkingDirectory="$(ClientAppRoot)" Command="npm install" />
+    <!-- npm ci installs exactly what package-lock.json records and fails when package.json no longer matches
+         it, so a version range never quietly pulls in a newer release. A compromised new release of any
+         package, even one several levels down, would otherwise run its install scripts on the machine of
+         everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(ClientAppRoot)" Command="npm ci" />
   </Target>
   <!-- Bundle the React auth SPA into wwwroot/auth before every build. Incremental: skipped when the
        output is newer than the sources. -->

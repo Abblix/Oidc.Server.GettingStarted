@@ -1,4 +1,5 @@
 using BlazorSample.Components;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -56,12 +57,19 @@ app.MapGet("/auth/login", (string? returnUrl) =>
         new() { RedirectUri = RedirectHttpResult.IsLocalUrl(returnUrl) ? returnUrl : "/" },
         [OpenIdConnectDefaults.AuthenticationScheme]));
 
-// Kept as GET for brevity in this sample. In production trigger sign-out from a POST form
-// that carries an antiforgery token, so a stray GET cannot log the user out.
-app.MapGet("/auth/logout", () =>
-    Results.SignOut(
+// Signing out changes state, so it takes a form post with an antiforgery token. As a GET, a link or a redirect on any
+// other site would sign the user out of this client and of the provider behind it, because the browser sends the
+// session cookie along on such a top-level navigation. The endpoint binds no form field, so nothing checks the token
+// for it unless the handler does.
+app.MapPost("/auth/logout", async (HttpContext context, IAntiforgery antiforgery) =>
+{
+    if (!await antiforgery.IsRequestValidAsync(context))
+        return Results.BadRequest();
+
+    return Results.SignOut(
         new() { RedirectUri = "/" },
-        [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]));
+        [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]);
+});
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

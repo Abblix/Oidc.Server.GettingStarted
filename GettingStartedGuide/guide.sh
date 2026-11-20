@@ -456,6 +456,14 @@ url, body = visit(f"{CLIENT}/")
 login = expect_login_page(url, body)
 print(f"open the client: redirected to the login page {path_of(url)}")
 
+step = "refuse a forged sign-in"
+# A page on another site posts only what it knows: the credentials and a request_uri, no antiforgery token
+forged = {"email": EMAIL, "password": PASSWORD, "requestUri": login.inputs["requestUri"]}
+url, body = visit(urllib.parse.urljoin(url, login.form_action), forged)
+if path_of(url) != f"{PROVIDER}/Auth/Login":
+    fail(f"a login post without the antiforgery token was not refused, it went on to {url}")
+print("refuse a forged sign-in: the provider shows its login page again")
+
 step = "sign in"
 form = dict(login.inputs, email=EMAIL, password=PASSWORD)
 url, body = visit(urllib.parse.urljoin(url, login.form_action), form)
@@ -480,7 +488,18 @@ for claim in ("sid", "auth_time"):
 print(f"check the claims: {', '.join(f'{name}={value}' for name, value in claims.items())}")
 
 step = "sign out"
-url, body = visit(f"{CLIENT}/Home/EndSession")
+logout = Page(body)
+if path_of(urllib.parse.urljoin(url, logout.form_action or "")) != f"{CLIENT}/Home/EndSession":
+    fail(f"the claims page has no sign-out form, its first form posts to {logout.form_action!r}")
+# A post from another site carries no antiforgery token, and the client must refuse it rather than sign out
+try:
+    with browser.open(urllib.parse.urljoin(url, logout.form_action), data=b"", timeout=10) as response:
+        fail(f"a sign-out post without the antiforgery token answered {response.status} at {response.geturl()}")
+except urllib.error.HTTPError as error:
+    if error.code != 400:
+        fail(f"a sign-out post without the antiforgery token answered {error.code}, not 400")
+print("sign out: a post without the antiforgery token is refused with 400")
+url, body = visit(urllib.parse.urljoin(url, logout.form_action), logout.inputs)
 passed = [path_of(address) for address in chain]
 for expected in (f"{PROVIDER}/connect/endsession", f"{CLIENT}/signout-callback-oidc", f"{CLIENT}/"):
     if expected not in passed:

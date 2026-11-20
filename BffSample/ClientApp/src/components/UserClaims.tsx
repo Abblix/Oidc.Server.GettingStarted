@@ -1,5 +1,5 @@
 import React from 'react';
-import { useBff } from './Bff';
+import { useBff } from './useBff';
 
 export const UserClaims: React.FC = () => {
     const { user, sessionError } = useBff();
@@ -18,7 +18,7 @@ export const UserClaims: React.FC = () => {
                 {Object.entries(user).map(([claim, value]) => (
                     <React.Fragment key={claim}>
                         <dt>{claim}</dt>
-                        <dd>{String(value)}</dd>
+                        <dd>{Array.isArray(value) ? value.join(', ') : String(value)}</dd>
                     </React.Fragment>
                 ))}
             </dl>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useBff } from "./Bff";
+import { useBff } from './useBff';
 
 interface Forecast {
     date: string;

@@ -179,6 +179,7 @@ container on the first run and an assignment on the container itself would grant
 | `Vault:TransitMount` | Mount path of the Transit engine (default `transit`). |
 | `Vault:Token` | Presented as `X-Vault-Token`. Bound like any other setting, so the sample supplies it as the `Vault__Token` environment variable rather than writing it into `appsettings.json`. Production replaces it with the `Vault:Authentication` AppRole or Kubernetes section, which issues short-lived tokens instead. |
 | `Azure:KeyVaultUri` | The vault URI, e.g. `https://my-vault.vault.azure.net/`. |
+| `Azure:Blob:ServiceUri` | The blob endpoint of the storage account that holds the sealed key ring, e.g. `https://myaccount.blob.core.windows.net`. Required when `KeyCustodian` is `Azure` and `UseKeysIn` is `Process`: the server refuses to start without it. |
 
 ## How it maps to the library
 
