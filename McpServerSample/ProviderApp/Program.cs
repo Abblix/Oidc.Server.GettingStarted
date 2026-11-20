@@ -22,6 +22,13 @@ using UriBuilder = Abblix.Utils.UriBuilder;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
+var issuer = configuration["Provider:Issuer"]
+             ?? throw new InvalidOperationException("Provider:Issuer is not configured");
+var mcpResource = configuration["McpServer:Resource"]
+                  ?? throw new InvalidOperationException("McpServer:Resource is not configured");
+var mcpScope = configuration["McpServer:Scope"]
+               ?? throw new InvalidOperationException("McpServer:Scope is not configured");
+
 var userStore = new TestUserStore(
     new TestUser(
         Subject: "1234567890",
@@ -47,7 +54,7 @@ builder.Services.AddOidcServices(options =>
     options.Tenants.Add(new TenantDefinition
     {
         Id = "main",
-        Issuer = new Uri(configuration["Provider:Issuer"]!),
+        Issuer = new Uri(issuer),
 
         // No pre-registered clients: every MCP client arrives through dynamic registration
         Clients = [],
@@ -57,15 +64,13 @@ builder.Services.AddOidcServices(options =>
         // MCP clients register with the scope the MCP server's challenge names, and the registration endpoint
         // knows only the tenant's own scopes, not those of its resources: declared on the resource alone,
         // mcp:tools is refused at registration as an unknown scope.
-        Scopes = [new ScopeDefinition(configuration["McpServer:Scope"]!)],
+        Scopes = [new ScopeDefinition(mcpScope)],
 
         // The MCP server as a protected resource. A client naming it in the resource parameter gets an access
         // token whose audience is exactly this URI, which is what the MCP server checks.
         Resources =
         [
-            new ResourceDefinition(
-                new Uri(configuration["McpServer:Resource"]!, UriKind.Absolute),
-                new ScopeDefinition(configuration["McpServer:Scope"]!)),
+            new ResourceDefinition(new Uri(mcpResource, UriKind.Absolute), new ScopeDefinition(mcpScope)),
         ],
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
@@ -85,7 +90,6 @@ builder.Services.Decompose<IClientRegistrationContextValidator>()
 builder.Services.AddAuthentication().AddCookie();
 
 builder.Services.AddAuthorization();
-builder.Services.AddCors();
 builder.Services.AddAntiforgery();
 builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();

@@ -6,9 +6,11 @@ using ModelContextProtocol.AspNetCore.Authentication;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
-var resource = new Uri(configuration["Mcp:Resource"]!);
-var authorizationServer = configuration["Mcp:AuthorizationServer"]!;
-var scope = configuration["Mcp:Scope"]!;
+var resource = new Uri(configuration["Mcp:Resource"]
+                       ?? throw new InvalidOperationException("Mcp:Resource is not configured"));
+var authorizationServer = configuration["Mcp:AuthorizationServer"]
+                          ?? throw new InvalidOperationException("Mcp:AuthorizationServer is not configured");
+var scope = configuration["Mcp:Scope"] ?? throw new InvalidOperationException("Mcp:Scope is not configured");
 
 // RFC 9728 section 3: the metadata lives at the resource identifier with /.well-known/oauth-protected-resource
 // inserted between the host and the path, so https://localhost:5008/mcp publishes it at
@@ -33,9 +35,10 @@ builder.Services
         // token issued for any other resource, or for none, is refused here.
         options.Audience = resource.OriginalString;
 
-        // The provider gives a refresh token the same audience and signing key as the access token, so only the
-        // JWT type tells them apart. Without this the MCP server would take a refresh token as a bearer token,
-        // and the specification says MCP servers "MUST NOT accept or transit any other tokens".
+        // The provider issues these clients no refresh token, but one it issues to any client carries the same
+        // audience and signing key as the access token, so only the JWT type tells them apart. Without this the
+        // MCP server would take such a token as a bearer token, and the specification says MCP servers "MUST NOT
+        // accept or transit any other tokens".
         options.TokenValidationParameters.ValidTypes = ["at+jwt"];
 
         // Keep the claims under their JWT names (sub, scope) rather than the mapped .NET claim types

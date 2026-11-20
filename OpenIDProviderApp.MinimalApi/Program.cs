@@ -68,7 +68,6 @@ builder.Services.AddAuthentication().AddCookie();
 
 // The Minimal API host has no MVC, so the services the pipeline relies on are registered directly
 builder.Services.AddAuthorization();
-builder.Services.AddCors();
 builder.Services.AddAntiforgery();
 builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
