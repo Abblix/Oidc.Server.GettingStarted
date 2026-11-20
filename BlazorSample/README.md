@@ -5,7 +5,7 @@ BlazorSample is a Blazor Web App (interactive Server render mode) that signs in 
 ## What it demonstrates
 
 - A Blazor Server app as an OpenID Connect client using `Microsoft.AspNetCore.Authentication.OpenIdConnect` with a cookie session, the authorization code flow, and PKCE, bound from `appsettings.json` (the same shape as TestClientApp).
-- Sign-in and sign-out as minimal HTTP endpoints (`/auth/login`, `/auth/logout`) that `Challenge` and `SignOut`, because writing the auth cookie and issuing the OIDC redirect both need the HTTP response, which has already started once a component is interactive. After sign-in `/auth/login` returns the user to its `returnUrl` when that is a path on the app itself, and to the home page otherwise.
+- Sign-in and sign-out as minimal HTTP endpoints (`GET /auth/login`, and `POST /auth/logout` from a form carrying an antiforgery token) that `Challenge` and `SignOut`, because writing the auth cookie and issuing the OIDC redirect both need the HTTP response, which has already started once a component is interactive. After sign-in `/auth/login` returns the user to its `returnUrl` when that is a path on the app itself, and to the home page otherwise.
 - Exposing the signed-in user to components through `CascadingAuthenticationState` and `AuthorizeView`.
 - Pointing `Identity.Name` at the `name` claim (inbound claim mapping is off, so claims keep their short names).
 

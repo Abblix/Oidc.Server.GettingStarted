@@ -167,6 +167,13 @@ async Task DriveTheLoop()
     if (login.Fields.GetValueOrDefault("requestUri") != requestUri)
         throw new StepFailed("The provider's login form does not carry the request_uri of its address");
 
+    // A page on another site posts only what it knows: the credentials and a request_uri, no antiforgery token.
+    // The provider must not sign the browser in on that, so the post ends on its login page, not at the client.
+    using var forgedLogin = await browser.PostAsync(login.Action, new FormUrlEncodedContent(
+        new Dictionary<string, string> { ["email"] = email, ["password"] = password, ["requestUri"] = requestUri }));
+    Expect(forgedLogin, provider, "/Auth/Login", "A login post without the antiforgery token was not refused");
+    Console.WriteLine("==> A login post without the antiforgery token was refused");
+
     using var signedIn = await browser.PostAsync(login.Action, new FormUrlEncodedContent(
         new Dictionary<string, string>(login.Fields) { ["email"] = email, ["password"] = password }));
     Expect(signedIn, client, "/", "Signing in did not return to the client's home page");
@@ -200,6 +207,13 @@ async Task DriveTheLoop()
     // Signing out ends the provider's session too, so the home page asks for a sign-in again. It is the form on
     // the client's pages, posted with its antiforgery token.
     var logout = await FormOf(signedInAgain, "/Home/EndSession");
+
+    // A post from another site carries no antiforgery token, and the client must refuse it rather than sign out
+    using var forgedLogout = await browser.PostAsync(logout.Action, new FormUrlEncodedContent([]));
+    if (forgedLogout.StatusCode != HttpStatusCode.BadRequest)
+        throw new StepFailed($"A sign-out post without the antiforgery token answered {(int)forgedLogout.StatusCode}, not 400");
+    Console.WriteLine("==> A sign-out post without the antiforgery token was refused");
+
     using var signedOut = await browser.PostAsync(logout.Action, new FormUrlEncodedContent(logout.Fields));
     Expect(signedOut, provider, "/Auth/Login", "Signing out did not end at the provider's login page");
     Console.WriteLine("==> Signed out");

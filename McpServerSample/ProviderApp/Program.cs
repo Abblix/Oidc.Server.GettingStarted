@@ -101,11 +101,6 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 
-// A page on another site could submit the login form with the attacker's own credentials: the victim's browser
-// would be signed in as the attacker, and the MCP client the victim then authorizes acts on the attacker's
-// account. This middleware refuses a form post to /Auth/Login without the token only the login page hands out.
-app.UseAntiforgery();
-
 app.MapOidcEndpoints();
 
 app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
@@ -123,6 +118,17 @@ app.MapPost("/Auth/Login", async (
         TimeProvider timeProvider,
         TestUserStore userStore) =>
     {
+        // A page on another site could submit this form with the attacker's own credentials: the victim's browser
+        // would be signed in as the attacker, and the MCP client the victim then authorizes acts on the attacker's
+        // account. The antiforgery token the form carries is what such a page cannot supply. A form opened in
+        // another tab before signing in carries a token that no longer matches, so it is shown again.
+        if (!await antiforgery.IsRequestValidAsync(context))
+        {
+            var fresh = antiforgery.GetAndStoreTokens(context);
+            return Results.Content(LoginPage(fresh, requestUri, "The sign-in form has expired, please sign in again"),
+                "text/html");
+        }
+
         if (!userStore.TryAuthenticate(email, password, out var subject))
         {
             var tokens = antiforgery.GetAndStoreTokens(context);
@@ -146,7 +152,10 @@ app.MapPost("/Auth/Login", async (
         var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
             { Query = { [AuthorizationRequest.Parameters.RequestUri] = requestUri } };
         return Results.Redirect(authorizeUrl);
-    });
+    })
+    // The handler checks the antiforgery token itself, so an expired form gets the login page again
+    // rather than the bare 400 the automatic check answers
+    .DisableAntiforgery();
 
 app.Run();
 
