@@ -6,7 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 // React app source runs in the browser; vite.config.ts runs in Node (it reads the dev
-// cert off disk and shells out to `dotnet dev-certs`), so its globals are declared apart.
+// cert off disk and runs `dotnet dev-certs`), so its globals are declared apart.
 export default tseslint.config(
   { ignores: ['dist'] },
   {
@@ -24,7 +24,6 @@ export default tseslint.config(
       globals: globals.browser,
     },
     settings: { react: { version: 'detect' } },
-    // A hook exported beside its provider is idiomatic React, not a Fast Refresh hazard.
     rules: {
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
