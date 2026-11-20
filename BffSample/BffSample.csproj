@@ -25,10 +25,16 @@
     </Exec>
     <Error Condition="'$(ErrorCode)' != '0'" Text="Node.js is required to build and run this project. To continue, please install Node.js from https://nodejs.org/, and then restart your command prompt or IDE." />
     <Message Importance="high" Text="Restoring dependencies using 'npm'. This may take several minutes..." />
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <!-- npm ci installs exactly the versions package-lock.json records. npm install would take the newest
+         release in each range, so a compromised new release of any package, even one several levels down,
+         would run its install scripts on the machine of everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
   </Target>
   <Target Name="PublishRunWebpack" AfterTargets="ComputeFilesToPublish">
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <!-- npm ci installs exactly the versions package-lock.json records. npm install would take the newest
+         release in each range, so a compromised new release of any package, even one several levels down,
+         would run its install scripts on the machine of everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
     <ItemGroup>
       <DistFiles Include="$(SpaRoot)dist\**" />

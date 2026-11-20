@@ -36,8 +36,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
 yarn.lock
+# package-lock.json is committed: the builds install with npm ci, exactly the versions it records
 
 # Vite writes a temporary dependency cache here on every dev run.
 .vite/

@@ -27,7 +27,10 @@
       <Output TaskParameter="ExitCode" PropertyName="NodeExitCode" />
     </Exec>
     <Error Condition="'$(NodeExitCode)' != '0'" Text="Node.js is required to build this project. Install it from https://nodejs.org/ and restart your terminal or IDE." />
-    <Exec WorkingDirectory="$(ClientRoot)" Command="npm install" />
+    <!-- npm ci installs exactly the versions package-lock.json records. npm install would take the newest
+         release in each range, so a compromised new release of any package, even one several levels down,
+         would run its install scripts on the machine of everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(ClientRoot)" Command="npm ci" />
   </Target>
 
   <!-- Bundle Bootstrap into wwwroot/lib before every build. Incremental: skipped

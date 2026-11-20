@@ -27,7 +27,10 @@
       <Output TaskParameter="ExitCode" PropertyName="NodeAppExitCode" />
     </Exec>
     <Error Condition="'$(NodeAppExitCode)' != '0'" Text="Node.js is required to build this project. Install it from https://nodejs.org/ and restart your terminal or IDE." />
-    <Exec WorkingDirectory="$(ClientAppRoot)" Command="npm install" />
+    <!-- npm ci installs exactly the versions package-lock.json records. npm install would take the newest
+         release in each range, so a compromised new release of any package, even one several levels down,
+         would run its install scripts on the machine of everyone who builds this sample. -->
+    <Exec WorkingDirectory="$(ClientAppRoot)" Command="npm ci" />
   </Target>
   <!-- Bundle the React auth SPA into wwwroot/auth before every build. Incremental: skipped when the
        output is newer than the sources. -->
