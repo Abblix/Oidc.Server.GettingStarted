@@ -12,6 +12,7 @@ using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.MinimalApi;
 using Abblix.Oidc.Server.Model;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using OpenIDProviderApp.MinimalApi;
@@ -68,6 +69,7 @@ builder.Services.AddAuthentication().AddCookie();
 // The Minimal API host has no MVC, so the services the pipeline relies on are registered directly
 builder.Services.AddAuthorization();
 builder.Services.AddCors();
+builder.Services.AddAntiforgery();
 builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
@@ -78,17 +80,24 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 
+// A page on another site could submit the login form with the attacker's own credentials: the victim's browser
+// would be signed in as the attacker, and whatever the victim then authorizes or enters lands in the attacker's
+// account. This middleware refuses a form post to /Auth/Login without the token only the login page hands out.
+app.UseAntiforgery();
+
 // The Minimal API counterpart of the MVC provider's app.MapOidcControllers()
 app.MapOidcEndpoints();
 
 // The login UI: the Minimal API counterpart of the MVC provider's AuthController
-app.MapGet("/Auth/Login", (string request_uri) =>
-    Results.Content(LoginPage(request_uri, error: null), "text/html"));
+app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
+    Results.Content(LoginPage(antiforgery.GetAndStoreTokens(context), request_uri, error: null), "text/html"));
 
 app.MapPost("/Auth/Login", async (
         [FromForm] string email,
         [FromForm] string password,
-        [FromForm] string requestUri,
+        [FromForm] string? requestUri,
+        IAntiforgery antiforgery,
+        HttpContext context,
         IAuthSessionService authService,
         IOidcEndpointResolver endpointResolver,
         ISessionIdGenerator sessionIdGenerator,
@@ -97,7 +106,10 @@ app.MapPost("/Auth/Login", async (
     {
         // Attempt to authenticate the user with provided credentials
         if (!userStore.TryAuthenticate(email, password, out var subject))
-            return Results.Content(LoginPage(requestUri, "Invalid username or password"), "text/html");
+        {
+            var tokens = antiforgery.GetAndStoreTokens(context);
+            return Results.Content(LoginPage(tokens, requestUri, "Invalid username or password"), "text/html");
+        }
 
         // If authentication is successful, create a new authentication session
         var authSession = new AuthSession(
@@ -109,22 +121,24 @@ app.MapPost("/Auth/Login", async (
         // Sign in the user using the authentication service
         await authService.SignInAsync(authSession);
 
+        // A visit to the login page on its own carries no authorization request to resume, and this host has no
+        // page of its own to return to
+        if (string.IsNullOrEmpty(requestUri))
+            return Results.Content(SignedInPage(), "text/html");
+
         // Redirect the user to the authorization endpoint URL, recovering the OIDC flow. The resolver answers the
         // address as mapped, a route prefix or a path base included; every endpoint is enabled here, as the
         // defaults leave them, so it always has an address to return.
         var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
             { Query = { [AuthorizationRequest.Parameters.RequestUri] = requestUri } };
         return Results.Redirect(authorizeUrl);
-    })
-    // The form carries a single-use request_uri that binds the post back to the pending
-    // authorization request, so the standard antiforgery token adds nothing here
-    .DisableAntiforgery();
+    });
 
 app.Run();
 
-static string LoginPage(string requestUri, string? error)
+static string LoginPage(AntiforgeryTokenSet tokens, string? requestUri, string? error)
 {
-    var encodedRequestUri = WebUtility.HtmlEncode(requestUri);
+    var encodedRequestUri = WebUtility.HtmlEncode(requestUri ?? "");
     var errorBlock = error == null ? "" : $"<p style=\"color:red\">{WebUtility.HtmlEncode(error)}</p>";
     return $"""
         <!DOCTYPE html>
@@ -134,6 +148,7 @@ static string LoginPage(string requestUri, string? error)
             <h1>Login</h1>
             {errorBlock}
             <form method="post" action="/Auth/Login">
+                <input type="hidden" name="{WebUtility.HtmlEncode(tokens.FormFieldName)}" value="{WebUtility.HtmlEncode(tokens.RequestToken)}" />
                 <input type="hidden" name="requestUri" value="{encodedRequestUri}" />
                 <p><label>Email: <input type="email" name="email" autofocus /></label></p>
                 <p><label>Password: <input type="password" name="password" /></label></p>
@@ -143,3 +158,14 @@ static string LoginPage(string requestUri, string? error)
         </html>
         """;
 }
+
+static string SignedInPage() => """
+    <!DOCTYPE html>
+    <html>
+    <head><title>OpenIDProviderApp.MinimalApi</title></head>
+    <body>
+        <h1>Signed in</h1>
+        <p>Open a client application to continue: it sends you here when it needs a sign-in.</p>
+    </body>
+    </html>
+    """;

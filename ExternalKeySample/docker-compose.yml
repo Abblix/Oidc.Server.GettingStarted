@@ -10,8 +10,10 @@ services:
     image: openbao/openbao:2.6.0
     cap_add:
       - IPC_LOCK
+    # Published on the loopback address only: the server takes the fixed root token below, so anyone on the same
+    # network who could reach the port could have it sign with the provider's keys and so mint tokens as this provider.
     ports:
-      - "8200:8200"
+      - "127.0.0.1:8200:8200"
     environment:
       BAO_ADDR: http://127.0.0.1:8200
     command: server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200

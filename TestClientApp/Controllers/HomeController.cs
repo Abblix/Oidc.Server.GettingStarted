@@ -43,6 +43,10 @@ public class HomeController(IHttpClientFactory httpClientFactory, IConfiguration
         };
     }
 
+    // Signing out changes state, so it takes a form post with an antiforgery token. As a GET, any page the user
+    // opens, or an image tag in an email, could sign them out of this client and of the provider behind it.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public IActionResult EndSession()
     {
         return SignOut(

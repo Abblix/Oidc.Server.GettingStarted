@@ -480,7 +480,10 @@ for claim in ("sid", "auth_time"):
 print(f"check the claims: {', '.join(f'{name}={value}' for name, value in claims.items())}")
 
 step = "sign out"
-url, body = visit(f"{CLIENT}/Home/EndSession")
+logout = Page(body)
+if path_of(urllib.parse.urljoin(url, logout.form_action or "")) != f"{CLIENT}/Home/EndSession":
+    fail(f"the claims page has no sign-out form, its first form posts to {logout.form_action!r}")
+url, body = visit(urllib.parse.urljoin(url, logout.form_action), logout.inputs)
 passed = [path_of(address) for address in chain]
 for expected in (f"{PROVIDER}/connect/endsession", f"{CLIENT}/signout-callback-oidc", f"{CLIENT}/"):
     if expected not in passed:
