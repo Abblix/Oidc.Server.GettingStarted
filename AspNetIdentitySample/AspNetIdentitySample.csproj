@@ -19,10 +19,10 @@
     <Content Remove="$(ClientAppRoot)**" />
     <None Remove="$(ClientAppRoot)**" />
     <None Include="$(ClientAppRoot)**" Exclude="$(ClientAppRoot)node_modules\**;$(ClientAppRoot)dist\**" />
-    <ClientAppInputs Include="$(ClientAppRoot)src\**\*;$(ClientAppRoot)index.html;$(ClientAppRoot)package.json;$(ClientAppRoot)vite.config.ts" />
+    <ClientAppInputs Include="$(ClientAppRoot)src\**\*;$(ClientAppRoot)index.html;$(ClientAppRoot)package.json;$(ClientAppRoot)package-lock.json;$(ClientAppRoot)vite.config.ts" />
   </ItemGroup>
-  <!-- Restore npm packages when node_modules is missing (fresh clone / CI). -->
-  <Target Name="EnsureClientAppDeps" Condition="!Exists('$(ClientAppRoot)node_modules')">
+  <!-- Restore npm packages whenever package-lock.json is newer than the copy npm keeps in node_modules: a fresh clone, or a pull that changed the lock. -->
+  <Target Name="EnsureClientAppDeps" Inputs="$(ClientAppRoot)package-lock.json" Outputs="$(ClientAppRoot)node_modules\.package-lock.json">
     <Exec Command="node --version" ContinueOnError="true">
       <Output TaskParameter="ExitCode" PropertyName="NodeAppExitCode" />
     </Exec>

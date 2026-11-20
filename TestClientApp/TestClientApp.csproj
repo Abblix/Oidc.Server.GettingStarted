@@ -21,8 +21,8 @@
     <None Include="$(ClientRoot)**" Exclude="$(ClientRoot)node_modules\**" />
   </ItemGroup>
 
-  <!-- Restore npm packages when node_modules is missing (fresh clone / CI). -->
-  <Target Name="EnsureClientDeps" Condition="!Exists('$(ClientRoot)node_modules')">
+  <!-- Restore npm packages whenever package-lock.json is newer than the copy npm keeps in node_modules: a fresh clone, or a pull that changed the lock. -->
+  <Target Name="EnsureClientDeps" Inputs="$(ClientRoot)package-lock.json" Outputs="$(ClientRoot)node_modules\.package-lock.json">
     <Exec Command="node --version" ContinueOnError="true">
       <Output TaskParameter="ExitCode" PropertyName="NodeExitCode" />
     </Exec>
@@ -37,7 +37,7 @@
   <!-- Bundle Bootstrap into wwwroot/lib before every build. Incremental: skipped
        when the outputs are newer than the sources. -->
   <Target Name="BuildClientAssets" BeforeTargets="Build" DependsOnTargets="EnsureClientDeps"
-          Inputs="$(ClientRoot)package.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts"
+          Inputs="$(ClientRoot)package.json;$(ClientRoot)package-lock.json;$(ClientRoot)vite.config.ts;$(ClientRoot)src\main.ts"
           Outputs="wwwroot\lib\bootstrap-bundle.js;wwwroot\lib\bootstrap-bundle.css">
     <Exec WorkingDirectory="$(ClientRoot)" Command="npm run build" />
   </Target>
