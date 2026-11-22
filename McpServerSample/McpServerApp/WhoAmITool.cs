@@ -11,7 +11,7 @@ namespace McpServerApp;
 [McpServerToolType]
 public sealed class WhoAmITool
 {
-    [McpServerTool(Name = "who_am_i"), Description("Returns the user and the scope of the access token used for the call.")]
+    [McpServerTool(Name = "who_am_i"), Description("Returns the user, the client and the scope of the access token used for the call.")]
     public static string WhoAmI(ClaimsPrincipal user)
-        => $"subject={user.FindFirstValue("sub")}; scope={user.FindFirstValue("scope")}";
+        => $"subject={user.FindFirstValue("sub")}; client_id={user.FindFirstValue("client_id")}; scope={user.FindFirstValue("scope")}";
 }

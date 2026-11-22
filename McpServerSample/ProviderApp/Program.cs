@@ -5,6 +5,7 @@ using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
 using Abblix.Oidc.Server.Features;
+using Abblix.Oidc.Server.Features.ClientIdMetadataDocuments;
 using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
@@ -28,6 +29,9 @@ var mcpResource = configuration["McpServer:Resource"]
                   ?? throw new InvalidOperationException("McpServer:Resource is not configured");
 var mcpScope = configuration["McpServer:Scope"]
                ?? throw new InvalidOperationException("McpServer:Scope is not configured");
+var allowedClientIdPrefixes = configuration.GetSection("ClientIdMetadataDocuments:AllowedClientIdPrefixes").Get<string[]>()
+                              ?? throw new InvalidOperationException(
+                                  "ClientIdMetadataDocuments:AllowedClientIdPrefixes is not configured");
 
 var userStore = new TestUserStore(
     new TestUser(
@@ -41,10 +45,11 @@ builder.Services.AddSingleton<IUserInfoProvider>(userStore);
 // Grants every client everything it asks for once the user has signed in. With open registration below, any
 // application can become a client, so a real deployment registers its own IUserConsentsProvider and shows the
 // user which client is asking (the MCP specification asks the authorization server to display the redirect
-// URI's host during authorization).
+// URI's host during authorization). A client known only by its metadata document is one nobody reviewed, so with
+// this provider the library starts only when the client identifier URLs it accepts are listed (see below).
 builder.Services.AddConsentGrantedForEveryClient();
 
-builder.Services.AddOidcServices(options =>
+var oidcServer = builder.Services.AddOidcServices(options =>
 {
     // MCP clients have no relationship with this provider before they connect, so they register themselves
     // (RFC 7591). Registration without an initial access token is what lets them do that unattended; the
@@ -64,6 +69,13 @@ builder.Services.AddOidcServices(options =>
         // reports, is enough, so the client gets its refresh token.
         OfflineAccess = OfflineAccess.Allowed,
     };
+
+#pragma warning disable ABX9001 // Client ID Metadata Documents are experimental until the draft becomes an RFC
+    // A client may name itself by the https URL of a metadata document it publishes instead of registering
+    // (draft-ietf-oauth-client-id-metadata-document-03). The provider fetches only documents under these prefixes,
+    // so an unknown URL is refused without a request leaving the provider.
+    options.ClientIdMetadataDocuments.AllowedClientIdPrefixes = allowedClientIdPrefixes;
+#pragma warning restore ABX9001
 
     options.Tenants.Add(new TenantDefinition
     {
@@ -86,6 +98,13 @@ builder.Services.AddOidcServices(options =>
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
     });
 });
+
+#pragma warning disable ABX9001
+// Resolves a client_id that is an https URL by fetching its document through the library's outbound guard, and
+// advertises client_id_metadata_document_supported in the metadata. What such a client may ask for is bounded by
+// NewClientOptions above, as for a client that registers itself.
+oidcServer.AddClientIdMetadataDocuments();
+#pragma warning restore ABX9001
 
 // Serves the registration endpoint and advertises it as registration_endpoint in the metadata; without this
 // call the provider has no registration endpoint at all.
