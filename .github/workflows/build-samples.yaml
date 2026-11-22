@@ -37,7 +37,7 @@ jobs:
           dotnet-version: '11.0.x'
         timeout-minutes: 3
 
-      # Four samples install their client packages with npm ci and bundle them with Vite as part of the build
+      # Samples with a client app install its packages with npm ci during the build, and most bundle it there
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '24'
@@ -48,4 +48,11 @@ jobs:
         # Restores NuGet and npm packages for every project and bundles the client apps, which on a cold
         # cache comes close to the usual 3-minute step ceiling
         timeout-minutes: 4
+
+      # BffSample bundles its React client only on publish, so the build above compiles none of its
+      # TypeScript; its packages are already installed by that build
+      - name: Build the BffSample client
+        working-directory: BffSample/ClientApp
+        run: npm run build
+        timeout-minutes: 3
     timeout-minutes: 5
