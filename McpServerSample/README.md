@@ -18,6 +18,7 @@ On the provider side (`ProviderApp/Program.cs`):
 - The MCP server is declared as a `ResourceDefinition` with its `mcp:tools` scope. The provider writes the resource a client names into the access token's audience and answers `invalid_target` for a resource it does not know.
 - Open dynamic client registration. `AddDynamicClientRegistration()` serves the registration endpoint and advertises it in the metadata. `RequireInitialAccessToken = false` lets a client register without a token handed out in advance, which is what an MCP client meeting this provider for the first time needs. The library's default asks for one.
 - No pre-registered clients at all: every client in this sample arrives through registration.
+- The user approves every authorization on a consent page. Any application can register itself, so the provider cannot tell who is asking, and RFC 10017 section 6.3.3.2 says an authorization server "SHOULD NOT process authorization requests automatically without user consent or interaction, except when the authorization server can assure the identity of the client application". `ConsentPageDecisions` is the sample's `IUserConsentsProvider`: it holds every request's consent pending, so the library sends the user to the tenant's `ConsentUri`, `/Auth/Consent`. The page names the client and the address the code goes to. Allow resumes the request with the consent given, and Deny ends it with `access_denied`. A decision answers only the request it was made on and is not remembered for the client: the section lets an earlier approval count only for a client limited to exact HTTPS redirect URIs, and an MCP client redirects to a loopback `http` address.
 - Only clients acting for a user are admitted. Open registration accepts any grant type the server supports, so a `client_credentials` client could register itself and get a token for the MCP server with no user behind it. `UserGrantsOnlyValidator`, added to the end of the library's registration pipeline, refuses every grant type other than `authorization_code` and `refresh_token` with `invalid_client_metadata`. `refresh_token` is admitted because MCP clients register it. A client gets a refresh token it can use only when three things hold: it registered `refresh_token` among its grant types, the scope it registered (if it registered one) includes `offline_access`, and it asks for `offline_access` with `prompt=consent`. Asked without `prompt=consent`, `offline_access` is dropped and no refresh token is issued. A client that registered the scope `mcp:tools` alone is refused with `invalid_scope` when it asks for `offline_access` with `prompt=consent`. A client that did not register `refresh_token` is handed a refresh token it cannot redeem: the refresh request answers `unauthorized_client`. Without a usable refresh token, the client has to sign the user in again when its access token expires.
 
 On the MCP server side (`McpServerApp/Program.cs`), using the official C# MCP SDK (`ModelContextProtocol.AspNetCore`):
@@ -39,7 +40,7 @@ dotnet run --project McpServerSample/ProviderApp
 dotnet run --project McpServerSample/McpServerApp
 ```
 
-The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point a desktop or command-line MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser. It has to register with `application_type` `native`, as the MCP specification requires of it: a client registering as a web application is refused a `localhost` redirect. The registration endpoint and the MCP server answer requests from the client application itself, so the client runs on the desktop or the command line rather than inside a web page. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
+The provider listens on `https://localhost:5007` and the MCP server on `https://localhost:5008`. Point a desktop or command-line MCP client that supports authorization at `https://localhost:5008/mcp`. It opens the provider's login page in a browser, and after the sign-in the consent page, where you allow the client. It has to register with `application_type` `native`, as the MCP specification requires of it: a client registering as a web application is refused a `localhost` redirect. The registration endpoint and the MCP server answer requests from the client application itself, so the client runs on the desktop or the command line rather than inside a web page. The demo user is `john.doe@example.com` with password `Jd!2024$3cur3`, in memory and visible in `ProviderApp/Program.cs`.
 
 A quick look without a client:
 
@@ -53,14 +54,15 @@ The first returns `401` with the challenge, the second the resource metadata, an
 
 ## Before you take it further
 
-- Consent is granted automatically (`AddConsentGrantedForEveryClient`). With open registration any application can become a client, so a real provider shows the user which client is asking and where it will send the code, through an `IUserConsentsProvider` of its own.
+- The client name on the consent page is whatever the client registered, and the page says so. A provider that verifies some clients in another way can let those through without the page.
 - Registered clients live in memory and are gone when the provider restarts. A client holding a `client_id` from before the restart has to register again.
 - Signing keys are generated at startup, so a restarted provider invalidates every token issued before. The MCP server refuses tokens signed with the new key until it fetches the provider's keys again: `JwtBearer` does that by itself on meeting an unknown key, at most once per its refresh interval, a few minutes by default. Restarting the MCP server along with the provider recovers at once.
 - Open registration admits machine clients unless the host narrows the grant types, as `UserGrantsOnlyValidator` does here. A provider that drops it hands MCP server tokens to any program that asks.
 
 ## Layout
 
-- `ProviderApp/Program.cs`: the tenant with the MCP server as its resource, open registration, and the login endpoints.
+- `ProviderApp/Program.cs`: the tenant with the MCP server as its resource, open registration, and the login and consent endpoints.
+- `ProviderApp/ConsentPageDecisions.cs`: the consent provider that holds each request's consent until the user answers the consent page.
 - `ProviderApp/UserGrantsOnlyValidator.cs`: the registration step that admits only grant types acting for a user.
 - `ProviderApp/appsettings.json`: the issuer, and the MCP server's resource URI and scope.
 - `McpServerApp/Program.cs`: `JwtBearer` bound to the provider and to the MCP server's own audience and refusing tokens with no user, the MCP authentication scheme with the resource metadata, the scope policy, and `MapMcp`.
