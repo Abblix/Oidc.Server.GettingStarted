@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using McpClientApp;
+using ModelContextProtocol;
 using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -7,37 +8,42 @@ using ModelContextProtocol.Protocol;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
-var mcpServer = new Uri(configuration["Mcp:Server"] ?? throw new InvalidOperationException("Mcp:Server is not configured"));
+var mcpServer = AbsoluteUri(configuration["Mcp:Server"], "Mcp:Server", Uri.UriSchemeHttps, Uri.UriSchemeHttp);
 var documentFile = configuration["Client:MetadataDocument"]
                    ?? throw new InvalidOperationException("Client:MetadataDocument is not configured");
+var newTaskTitle = configuration["Demo:NewTask"] ?? throw new InvalidOperationException("Demo:NewTask is not configured");
 
-// The document is the one description of this client: its URL is the client_id, and the name and the redirect URI
+// The scopes the assistant asks for, or none configured to ask for every scope the tracker names
+var requestedScopes = configuration.GetSection("Scopes").Get<string[]>();
+
+// The document is the one description of the assistant: its URL is the client_id, and the name and the redirect URI
 // a dynamic registration sends are read from it as well
 var documentPath = Path.Combine(AppContext.BaseDirectory, documentFile);
 var documentText = await File.ReadAllTextAsync(documentPath);
 var document = JsonNode.Parse(documentText) as JsonObject
                ?? throw new InvalidOperationException($"{documentPath} is not a JSON object");
-var clientId = new Uri(RequiredString(document, "client_id"), UriKind.Absolute);
-var clientName = RequiredString(document, "client_name");
-var redirectUri = document["redirect_uris"] is JsonArray { Count: > 0 } redirectUris
-    ? new Uri(redirectUris[0]!.GetValue<string>(), UriKind.Absolute)
-    : throw new InvalidOperationException($"{documentPath} lists no redirect_uris");
+var clientId = AbsoluteUri(DocumentString(document, "client_id"), $"client_id in {documentPath}", Uri.UriSchemeHttps);
+var clientName = DocumentString(document, "client_name")
+                 ?? throw new InvalidOperationException($"{documentPath} has no client_name");
+var redirectUri = AbsoluteUri(
+    document["redirect_uris"] is JsonArray { Count: > 0 } redirectUris ? DocumentString(redirectUris, 0) : null,
+    $"the first of redirect_uris in {documentPath}",
+    Uri.UriSchemeHttp);
 
 var useMetadataDocument = configuration["Registration"] switch
 {
     "metadata-document" => true,
     "dynamic" => false,
-    var other => throw new InvalidOperationException(
-        $"Registration is '{other}'; use metadata-document or dynamic"),
+    var other => throw new InvalidOperationException($"Registration is '{other}'; use metadata-document or dynamic"),
 };
 
-// This app is the client's web site and its loopback redirect listener at once: the document is served at the
-// origin of its client_id, and the provider's redirect arrives at the origin of the redirect URI
+// This app stands for the vendor's web site, which publishes the document at the origin of its client_id, and for
+// the assistant on the employee's computer, which receives the provider's redirect at the origin of the redirect URI
 builder.WebHost.UseUrls(clientId.GetLeftPart(UriPartial.Authority), redirectUri.GetLeftPart(UriPartial.Authority));
 
-var signIn = configuration["SignIn"] switch
+ISignIn signIn = configuration["SignIn"] switch
 {
-    "browser" => (ISignIn)new BrowserSignIn(redirectUri),
+    "browser" => new BrowserSignIn(redirectUri),
     "headless" => new HeadlessSignIn(
         redirectUri,
         configuration["HeadlessSignIn:Email"]
@@ -49,8 +55,8 @@ var signIn = configuration["SignIn"] switch
 
 var app = builder.Build();
 
-// Served as it is on disk, with the media type draft-ietf-oauth-client-id-metadata-document section 4 asks for. The
-// line it prints shows the provider fetching it.
+// Served as application/json, the type the provider names in its Accept header (draft section 6). The line it prints
+// shows the provider fetching it.
 app.MapGet(clientId.AbsolutePath, (HttpRequest request) =>
 {
     Console.WriteLine($"Served the metadata document (Accept: {request.Headers.Accept})");
@@ -67,9 +73,9 @@ var oauth = new ClientOAuthOptions
 {
     RedirectUri = redirectUri,
 
-    // The SDK sends this URL as the client_id when the provider's metadata says
-    // client_id_metadata_document_supported, and registers the client otherwise (MCP authorization, client
-    // registration). Without it the client always registers.
+    // The SDK sends this URL as the client_id when the provider's metadata says client_id_metadata_document_supported,
+    // and registers the client otherwise (MCP authorization, client registration). Without it the client always
+    // registers.
     ClientMetadataDocumentUri = useMetadataDocument ? clientId : null,
 
     DynamicClientRegistration = new DynamicClientRegistrationOptions
@@ -82,30 +88,66 @@ var oauth = new ClientOAuthOptions
         },
     },
 
-    // The handler returns the code together with state and iss, so the SDK checks both: section 7 of the draft makes
-    // iss mandatory in the authorization response
+    // The SDK takes the scopes the tracker names. Kept to the configured ones, a refusal for a missing scope is final:
+    // the SDK asks again only when that adds a scope (step-up authorization), and here it cannot
+    ScopeSelector = requestedScopes is null
+        ? null
+        : candidates => candidates?.Where(scope => requestedScopes.Contains(scope) || scope == "offline_access"),
+
+    // The handler returns the code together with state and iss, so the SDK checks both: section 7 of the draft makes iss
+    // mandatory in the authorization response
     AuthorizationCallbackHandler = signIn.AuthorizeAsync,
 };
 
-if (useMetadataDocument)
-    Console.WriteLine($"Identifying as {clientId}, served by this app");
+Console.WriteLine(useMetadataDocument
+    ? $"{clientName} identifies itself as {clientId}"
+    : $"{clientName} registers itself at the provider");
 
-await using (var transport = new HttpClientTransport(
-                 new HttpClientTransportOptions { Endpoint = mcpServer, OAuth = oauth },
-                 loggerFactory))
-await using (var client = await McpClient.CreateAsync(transport, loggerFactory: loggerFactory))
+await using var transport = new HttpClientTransport(
+    new HttpClientTransportOptions { Endpoint = mcpServer, OAuth = oauth },
+    loggerFactory);
+await using var client = await McpClient.CreateAsync(transport, loggerFactory: loggerFactory);
+
+// What the assistant does for the employee: look at the list, add a task, close it, look again
+try
 {
-    var result = await client.CallToolAsync("who_am_i");
-    foreach (var block in result.Content.OfType<TextContentBlock>())
-        Console.WriteLine($"who_am_i: {block.Text}");
-
-    if (result.IsError is true)
-        Environment.ExitCode = 1;
+    await CallAsync("who_am_i");
+    await CallAsync("list_my_tasks");
+    var created = await CallAsync("create_task", new Dictionary<string, object?> { ["title"] = newTaskTitle });
+    await CallAsync("close_task", new Dictionary<string, object?> { ["id"] = TaskId(created) });
+    await CallAsync("list_my_tasks");
+}
+catch (Exception exception) when (exception is McpException or HttpRequestException)
+{
+    Console.WriteLine($"Refused: {exception.Message}");
+    Environment.ExitCode = 1;
 }
 
 await app.StopAsync();
 return;
 
-static string RequiredString(JsonObject document, string member)
-    => document[member]?.GetValue<string>()
-       ?? throw new InvalidOperationException($"The client metadata document has no {member}");
+async Task<CallToolResult> CallAsync(string tool, IReadOnlyDictionary<string, object?>? arguments = null)
+{
+    var result = await client.CallToolAsync(tool, arguments);
+    var text = string.Join('\n', result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+    Console.WriteLine($"{tool}: {text}");
+    return result.IsError is true ? throw new McpException($"{tool} failed: {text}") : result;
+}
+
+// create_task answers with the task as structured content
+static int TaskId(CallToolResult created)
+    => created.StructuredContent is { } task && task.TryGetProperty("id", out var id)
+        ? id.GetInt32()
+        : throw new InvalidOperationException("create_task answered no task id");
+
+static string? DocumentString(JsonNode? parent, object member)
+{
+    var node = member is int index ? parent?.AsArray()[index] : parent?[(string)member];
+    return node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+}
+
+static Uri AbsoluteUri(string? value, string name, params string[] schemes)
+    => Uri.TryCreate(value, UriKind.Absolute, out var uri) && schemes.Contains(uri.Scheme)
+        ? uri
+        : throw new InvalidOperationException(
+            $"{name} is '{value}'; it has to be an absolute {string.Join(" or ", schemes)} URL");

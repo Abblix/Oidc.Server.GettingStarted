@@ -18,6 +18,8 @@ public sealed class BrowserSignIn(Uri redirectUri) : ISignIn
     {
         Console.WriteLine("Open this address in a browser and sign in:");
         Console.WriteLine(context.AuthorizationUri);
+        Console.WriteLine("An error page there instead of the login page means the provider refused the request, and " +
+                          "its log says why; the provider does not redirect back after that, so stop this app with Ctrl+C.");
         return await _response.Task.WaitAsync(cancellationToken);
     }
 
@@ -41,7 +43,7 @@ public sealed class BrowserSignIn(Uri redirectUri) : ISignIn
             State = query["state"].ToString(),
             Iss = query["iss"].ToString() is { Length: > 0 } iss ? iss : null,
         });
-        return Page("Signed in. The MCP client goes on in the terminal; this tab can be closed.");
+        return Page("Signed in. The assistant goes on in the terminal; this tab can be closed.");
     }
 
     private IResult Page(string message)
@@ -49,9 +51,9 @@ public sealed class BrowserSignIn(Uri redirectUri) : ISignIn
             $"""
              <!DOCTYPE html>
              <html>
-             <head><title>McpServerSample client</title></head>
+             <head><title>Example Assistant</title></head>
              <body>
-                 <h1>McpServerSample client</h1>
+                 <h1>Example Assistant</h1>
                  <p>{WebUtility.HtmlEncode(message)}</p>
                  <p>Redirect URI: {WebUtility.HtmlEncode(redirectUri.ToString())}</p>
              </body>

@@ -1,6 +1,7 @@
 {
   "client_id": "https://localhost:5009/client-metadata.json",
-  "client_name": "McpServerSample client",
+  "client_name": "Example Assistant",
+  "client_uri": "https://localhost:5009/",
   "redirect_uris": [ "http://127.0.0.1:5010/callback" ],
   "grant_types": [ "authorization_code", "refresh_token" ],
   "response_types": [ "code" ],

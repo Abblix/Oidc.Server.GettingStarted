@@ -41,7 +41,11 @@ public sealed class HeadlessSignIn(Uri redirectUri, string email, string passwor
             new Uri(loginUri, form.GetAttribute("action")),
             new FormUrlEncodedContent(fields),
             cancellationToken);
-        var (_, redirect) = await FollowAsync(browser, loginUri, cancellationToken, posted);
+        var (answer, redirect) = await FollowAsync(browser, loginUri, cancellationToken, posted);
+
+        // A refused sign-in (wrong credentials, an expired form) answers the login page again rather than redirecting
+        if (redirect.GetLeftPart(UriPartial.Path) != redirectUri.GetLeftPart(UriPartial.Path))
+            throw new InvalidOperationException($"The sign-in did not lead back to the redirect URI but to {redirect}: {answer}");
 
         var query = HttpUtility.ParseQueryString(redirect.Query);
         if (query["error"] is { } error)

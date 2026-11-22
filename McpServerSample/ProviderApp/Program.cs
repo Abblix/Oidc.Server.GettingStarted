@@ -27,8 +27,10 @@ var issuer = configuration["Provider:Issuer"]
              ?? throw new InvalidOperationException("Provider:Issuer is not configured");
 var mcpResource = configuration["McpServer:Resource"]
                   ?? throw new InvalidOperationException("McpServer:Resource is not configured");
-var mcpScope = configuration["McpServer:Scope"]
-               ?? throw new InvalidOperationException("McpServer:Scope is not configured");
+var readScope = configuration["McpServer:Scopes:Read"]
+                ?? throw new InvalidOperationException("McpServer:Scopes:Read is not configured");
+var writeScope = configuration["McpServer:Scopes:Write"]
+                 ?? throw new InvalidOperationException("McpServer:Scopes:Write is not configured");
 var allowedClientIdPrefixes = configuration.GetSection("ClientIdMetadataDocuments:AllowedClientIdPrefixes").Get<string[]>()
                               ?? throw new InvalidOperationException(
                                   "ClientIdMetadataDocuments:AllowedClientIdPrefixes is not configured");
@@ -51,9 +53,9 @@ builder.Services.AddConsentGrantedForEveryClient();
 
 var oidcServer = builder.Services.AddOidcServices(options =>
 {
-    // MCP clients have no relationship with this provider before they connect, so they register themselves
-    // (RFC 7591). Registration without an initial access token is what lets them do that unattended; the
-    // library's default asks for one.
+    // MCP clients have no relationship with this provider before they connect, so a client without a metadata
+    // document registers itself (RFC 7591). Registration without an initial access token is what lets it do that
+    // unattended; the library's default asks for one.
     options.RequireInitialAccessToken = false;
 
     options.NewClientOptions = new NewClientOptions
@@ -82,17 +84,20 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         Id = "main",
         Issuer = new Uri(issuer),
 
-        // No pre-registered clients: every MCP client arrives through dynamic registration
+        // No pre-registered clients: every MCP client arrives by its metadata document or by dynamic registration
         Clients = [],
 
         LoginUri = new Uri("/Auth/Login", UriKind.Relative),
 
-        // The MCP server as a protected resource. A client naming it in the resource parameter gets an access
-        // token whose audience is exactly this URI, which is what the MCP server checks. MCP clients register with
-        // the scope the MCP server's challenge names, and registration accepts a scope a resource declares.
+        // The task tracker's MCP server as a protected resource, with a scope for reading the employee's tasks and
+        // one for changing them. A client naming it in the resource parameter gets an access token whose audience
+        // is exactly this URI, which is what the MCP server checks. Registration accepts a scope a resource declares.
         Resources =
         [
-            new ResourceDefinition(new Uri(mcpResource, UriKind.Absolute), new ScopeDefinition(mcpScope)),
+            new ResourceDefinition(
+                new Uri(mcpResource, UriKind.Absolute),
+                new ScopeDefinition(readScope),
+                new ScopeDefinition(writeScope)),
         ],
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
