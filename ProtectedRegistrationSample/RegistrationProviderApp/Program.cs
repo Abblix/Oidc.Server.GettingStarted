@@ -70,6 +70,9 @@ builder.Services.AddDynamicClientRegistration();
 // The operator endpoints accept only the operator key. A separate command-line tool could not stand in for them:
 // this provider keeps its signing key and its token registry in memory, so a tool running in another process
 // would sign tokens this provider rejects and record revocations it never reads.
+// A scheme registered alone becomes the default one and runs on every request, so each registration and token
+// request would log a failed operator key. The switch keeps the scheme to the routes whose policy names it.
+AppContext.SetSwitch("Microsoft.AspNetCore.Authentication.SuppressAutoDefaultScheme", true);
 builder.Services
     .AddAuthentication()
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, OperatorKeyAuthenticationHandler>(

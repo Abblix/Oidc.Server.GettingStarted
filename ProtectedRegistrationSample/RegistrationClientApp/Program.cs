@@ -32,7 +32,7 @@ var otherClientName = Required("Registration:OtherClientName");
 using var http = new HttpClient();
 var exchange = new Exchange(http);
 
-var metadata = await http.GetFromJsonAsync<JsonObject>(new Uri(new Uri(issuer), ".well-known/openid-configuration"))
+var metadata = await http.GetFromJsonAsync<JsonObject>(issuer.TrimEnd('/') + "/.well-known/openid-configuration")
                ?? throw new InvalidOperationException($"{issuer} published no metadata");
 var registrationEndpoint = (string?)metadata["registration_endpoint"]
                            ?? throw new InvalidOperationException($"{issuer} publishes no registration_endpoint");
