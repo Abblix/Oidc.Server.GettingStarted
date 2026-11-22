@@ -128,7 +128,17 @@ return;
 
 async Task<CallToolResult> CallAsync(string tool, IReadOnlyDictionary<string, object?>? arguments = null)
 {
-    var result = await client.CallToolAsync(tool, arguments);
+    CallToolResult result;
+    try
+    {
+        result = await client.CallToolAsync(tool, arguments);
+    }
+    catch (HttpRequestException exception)
+    {
+        // The tracker's 403 for a scope the employee did not grant, once the SDK found no scope to step up to
+        throw new HttpRequestException($"{tool} was refused: {exception.Message}", exception, exception.StatusCode);
+    }
+
     var text = string.Join('\n', result.Content.OfType<TextContentBlock>().Select(block => block.Text));
     Console.WriteLine($"{tool}: {text}");
     return result.IsError is true ? throw new McpException($"{tool} failed: {text}") : result;
