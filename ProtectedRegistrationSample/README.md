@@ -13,7 +13,7 @@ On the provider side (`RegistrationProviderApp/Program.cs`):
 - Issuing a token. `POST /operator/initial-access-tokens` takes the party the token is for (`subject`) and its lifetime in seconds (`expires_in`). It calls `IInitialAccessTokenService.IssueTokenAsync` and returns the token with its `jti`. A token can register clients until it expires or is revoked, so one token can serve every client a partner registers.
 - Revoking a token. `DELETE /operator/initial-access-tokens/{jti}` records the `jti` as revoked in `ITokenRegistry`, at the tenant that issued the token, which is where the registration endpoint looks. A `jti` does not say when its token expires, so the record is kept for `Operator:MaxTokenLifetime`, the longest lifetime the operator endpoint will issue. That outlives any token the record could refuse.
 - The operator endpoint is not open to everyone. It accepts only the operator key, sent as `Authorization: Bearer <key>` and checked by `OperatorKeyAuthenticationHandler`. The provider stores only the key's SHA-256 hash (`Operator:KeyHash`), so reading `appsettings.json` does not let anyone issue tokens. A plain SHA-256 is enough because the key is 32 random bytes and not a password a person chose. A separate command-line tool would not work for this sample: the provider keeps its signing key and its token registry in memory, so a tool running in another process would sign tokens the provider rejects and record revocations it never reads.
-- Only services are admitted. `NewClientOptions.AllowedGrantTypes` limits registration to `client_credentials`, the grant a service uses to act for itself. A client asking for a grant that signs a user in is refused with `invalid_client_metadata`, so the provider needs no login page. `AddConsentGrantedForEveryClient()` is there because the provider requires some consent decision, but with no user-facing grant nobody is ever asked.
+- Registration admits one grant type. `NewClientOptions.AllowedGrantTypes` limits registration to `client_credentials`, the grant a service uses to act for itself. A client asking for a grant that signs a user in is refused with `invalid_client_metadata`, so the provider needs no login page. The limit is on the grant type only. How the client authenticates at the token endpoint is the `token_endpoint_auth_method` it registers, and this provider accepts `none` there too: a client registered that way gets tokens with its `client_id` alone. The sample's client registers `client_secret_basic`, and a client you approve should register a method that carries a credential. `AddConsentGrantedForEveryClient()` is there because the provider requires some consent decision, but with no user-facing grant nobody is ever asked.
 
 On the client side (`RegistrationClientApp/Program.cs`):
 
@@ -73,7 +73,7 @@ HTTP/1.1 401 Unauthorized
 WWW-Authenticate: Bearer realm="operator"
 ```
 
-A lifetime outside the allowed range gets `400` with `{"error":"expires_in is the token lifetime in seconds, from 1 to 86400"}`, and a request without `subject` gets `400` too.
+An `expires_in` that is a whole number of seconds below 1 or above `Operator:MaxTokenLifetime` gets `400` with `{"error":"expires_in is the token lifetime in seconds, from 1 to 86400"}`, and a request without `subject` gets `400` too.
 
 ### Register and manage the client
 
@@ -147,7 +147,7 @@ grant_type=client_credentials
   as expected: 200
 ```
 
-The registered client works at the token endpoint straight away. Next the client reads its registration with the registration access token, sending a `GET` to `registration_client_uri`, and gets the same metadata back with `200`. Then it updates the registration:
+The registered client works at the token endpoint straight away. Next the client reads its registration with the registration access token, sending a `GET` to `registration_client_uri`, and gets `200` with the registered metadata and a registration access token. The `client_secret` and `client_id_issued_at` of the registration response are not in it: the provider stores the secret only as a hash. Then it updates the registration:
 
 ```
 === 5. Update the registration: a new client_name
