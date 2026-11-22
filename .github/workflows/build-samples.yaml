@@ -1,0 +1,56 @@
+name: Build every sample
+
+# Builds GettingStarted.slnx, which lists every sample, against the packages each project references. The
+# loop and the guide workflows run only the samples they need, so a sample outside them would otherwise stop
+# compiling unseen. A failing project is named in the error lines and in the summary MSBuild prints at the end.
+# A change to the library that breaks a sample is caught before it is published: the library's release
+# builds this same solution against the new packages.
+# GitHub-hosted runner: a pull request from a fork runs its own code here, so the job never shares a machine
+# that persists between jobs.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A newer commit makes a pull request's earlier run worthless; a push run on master is the branch's verdict
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build GettingStarted.slnx
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+        timeout-minutes: 3
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
+        with:
+          dotnet-version: '11.0.x'
+        timeout-minutes: 3
+
+      # Samples with a client app install its packages with npm ci during the build, and most bundle it there
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '24'
+        timeout-minutes: 3
+
+      - name: Build every sample
+        run: dotnet build GettingStarted.slnx
+        timeout-minutes: 3
+
+      # BffSample bundles its React client only on publish, so the build above compiles none of its
+      # TypeScript; its packages are already installed by that build
+      - name: Build the BffSample client
+        working-directory: BffSample/ClientApp
+        run: npm run build
+        timeout-minutes: 3
+    timeout-minutes: 5
