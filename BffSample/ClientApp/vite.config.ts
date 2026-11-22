@@ -15,6 +15,8 @@ const keyPath = path.resolve(certFolder, `localhost.key`);
 // profile folder with a space in its name stays one path.
 if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
   console.log(`Certificate or key file not found. Generating new files (${certPath}, ${keyPath})...`);
+  // dotnet dev-certs refuses to export into a folder that does not exist, which it does not on a fresh machine
+  fs.mkdirSync(certFolder, { recursive: true });
   execFileSync('dotnet', ['dev-certs', 'https', '--export-path', certPath, '--format', 'Pem', '--no-password'],
     { stdio: 'inherit' });
 } else {
