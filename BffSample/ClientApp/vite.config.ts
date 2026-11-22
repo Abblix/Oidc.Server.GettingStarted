@@ -31,8 +31,8 @@ if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
 // proxy that starts this dev server hands the variable down.
 const bffUrl = env.ASPNETCORE_URLS?.split(';').find(url => url.startsWith('https://'));
 
-export default defineConfig(({ command }) => {
-  if (command === 'serve' && !bffUrl)
+export default defineConfig(({ command, isPreview }) => {
+  if (command === 'serve' && !isPreview && !bffUrl)
     throw new Error('ASPNETCORE_URLS names no https address of the BFF: start the dev server with '
       + '`dotnet run --project BffSample`, which launches it');
 
@@ -44,6 +44,10 @@ export default defineConfig(({ command }) => {
       // dev server and read whatever it serves: the app's source, and any file a dev server flaw lets out of the
       // project. The BFF's SPA proxy only needs localhost.
       host: 'localhost',
+      // Vite answers CORS preflights itself by default, approving any localhost origin and whatever headers it
+      // asks for, so a sibling application could get X-CSRF approved before the request reaches the BFF. The SPA is
+      // served from this origin and needs no CORS.
+      cors: false,
       https: {
         // Read the contents of the PEM and key files
         cert: fs.readFileSync(certPath, 'utf-8'),
