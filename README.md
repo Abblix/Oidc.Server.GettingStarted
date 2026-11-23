@@ -42,7 +42,7 @@ Every sample folder has a README on running that sample alone.
 The `OpenIDProviderApp` is the MVC provider: it signs users in, keeps their session and issues ID and access tokens through Abblix OIDC Server. It registers the interactive clients (`TestClientApp`, `BffSample`, `BlazorSample`), a `client_credentials` client `console_client`, and the `weather` resource that `ApiSample` protects, and it serves the authorization code flow with PKCE. It is a demo by design: one user hard-coded in `Program.cs`, a signing key generated at every start (tokens issued before a restart stop validating), and consent granted to every client without asking. `AspNetIdentitySample` shows what changes on the way to production.
 
 - AspNetIdentitySample  
-The `AspNetIdentitySample` is the provider taken one step toward production, hosted through the Minimal API adapter: users live in an ASP.NET Core Identity store backed by Entity Framework Core and SQLite, and its signing key (encrypted with Data Protection) and client registrations persist in SQLite as well, so a restart keeps both. No user is seeded: the first visit creates an account on its sign-up screen. It demonstrates the seams where Abblix OIDC Server meets an external user system. First, an `IUserInfoProvider` adapter over Identity's `UserManager` turns a subject identifier into claims. Second, a login flow that splits the work: Identity verifies the password through `CheckPasswordSignInAsync` (password hashing, failed-attempt counting, and lockout), while the library's `IAuthSessionService` issues the OpenID Connect session cookie. The result is a provider whose users, credentials, and profile data live in a database rather than in code, while the protocol handling stays entirely with the library. Its sign-in and sign-up screens are a React and Tailwind SPA that talks to a JSON auth API, with the client's types generated from the server's OpenAPI document.
+The `AspNetIdentitySample` is the provider taken one step toward production, hosted through the Minimal API adapter: users live in an ASP.NET Core Identity store backed by Entity Framework Core and SQLite, and its signing key (encrypted with Data Protection) and client registrations persist in SQLite as well, so a restart keeps both. No user is seeded: the sign-in screen links to sign-up, where the first account is created. It demonstrates the seams where Abblix OIDC Server meets an external user system. First, an `IUserInfoProvider` adapter over Identity's `UserManager` turns a subject identifier into claims. Second, a login flow that splits the work: Identity verifies the password through `CheckPasswordSignInAsync` (password hashing, failed-attempt counting, and lockout), while the library's `IAuthSessionService` issues the OpenID Connect session cookie. The result is a provider whose users, credentials, and profile data live in a database rather than in code, while the protocol handling stays entirely with the library. Its sign-in and sign-up screens are a React and Tailwind SPA that talks to a JSON auth API, with the client's types generated from the server's OpenAPI document.
 
 - OpenIDProviderApp.MinimalApi  
 The `OpenIDProviderApp.MinimalApi` is the Minimal API counterpart of `OpenIDProviderApp`: the same protocol core hosted through `Abblix.Oidc.Server.MinimalApi` and mapped with `MapOidcEndpoints()`, with the same clients, the same `weather` resource and `console_client`, read from the `Oidc` section of `appsettings.json`. Like the MVC provider, it generates its signing key at every start. A client moves between the two by changing `Authority`, and a client that also calls `ApiSample` moves the API's `Authority` with it, since the API takes the provider's keys and issuer from there.
@@ -70,12 +70,12 @@ The `McpServerSample` is an authorized Model Context Protocol server paired with
 
 `OpenIDProviderApp`, `OpenIDProviderApp.MinimalApi`, `AspNetIdentitySample` and `ExternalKeySample` each ship a `requests.http` that fetches the discovery document and key set, gets a client credentials token and introspects it, straight from Visual Studio, Rider or VS Code.
 
-`OpenIDProviderApp`, `AspNetIdentitySample` and `ExternalKeySample` all listen on `https://localhost:5001`, so run one of them at a time; the clients work with whichever answers there.
+`OpenIDProviderApp`, `AspNetIdentitySample` and `ExternalKeySample` all listen on `https://localhost:5001`, so run one of them at a time; the interactive clients work with `OpenIDProviderApp` or `AspNetIdentitySample`, whichever answers there.
 
 ## 📋 Prerequisites
 
 - The .NET 11 SDK: every project targets `net11.0`.
-- Node.js with npm: `OpenIDProviderApp`, `TestClientApp`, `AspNetIdentitySample` and `BffSample` build their front ends during `dotnet build`, and the build stops if Node.js is missing.
+- Node.js with npm: `OpenIDProviderApp`, `TestClientApp`, `AspNetIdentitySample` and `BffSample` restore or build their front ends during `dotnet build`, and the build stops if Node.js is missing.
 - A trusted development certificate, since the samples call each other over HTTPS: `dotnet dev-certs https --trust`. On Linux, also add `$HOME/.aspnet/dev-certs/trust` to `SSL_CERT_DIR`, as that command explains.
 - Docker, only for `ExternalKeySample` with the OpenBao custodian.
 - bash and Python 3.9 or later, only for `GettingStartedGuide/guide.sh`.
@@ -88,7 +88,7 @@ The `McpServerSample` is an authorized Model Context Protocol server paired with
 dotnet run-loop.cs
 ```
 
-`run-loop.cs` is a single-file C# program, so the .NET SDK runs it with nothing installed beyond the [prerequisites](#-prerequisites). It builds them, starts each on the address of its launch profile (provider `https://localhost:5001`, or `https://localhost:5006` with `--provider minimal`, client `https://localhost:5002`, API `https://localhost:5004`) and waits until each answers. Ctrl+C stops them all. It refuses to start while any of those addresses already answers, so it never runs against an older copy left running.
+`run-loop.cs` is a single-file C# program, so the .NET SDK runs it with nothing installed beyond the [prerequisites](#-prerequisites). It builds the provider, the client and the API, starts each on the address of its launch profile (provider `https://localhost:5001`, or `https://localhost:5006` with `--provider minimal`, client `https://localhost:5002`, API `https://localhost:5004`) and waits until each answers. Ctrl+C stops them all. It refuses to start while any of those addresses already answers, so it never runs against an older copy left running.
 
 Then walk through the loop in the browser:
 
@@ -136,13 +136,13 @@ A sample that does not run, or a README that says something the code does not do
 
 The sample code in this repository is licensed under the MIT License - see [LICENSE](LICENSE). Copy it into your own project, change it, ship it. The boundary between this code and the product it demonstrates is spelled out in [NOTICE](NOTICE).
 
-Abblix OIDC Server itself is a separate product under its own license, consumed here as a NuGet package and not redistributed in source form. Its terms are at [abblix.com/en/oidc-server/license](https://www.abblix.com/en/oidc-server/license), and the full text is [LICENSE.md](https://github.com/Abblix/Oidc.Server/blob/master/LICENSE.md) in the library's repository. Running these samples costs nothing: the license makes development, testing and staging environments free for everyone, and production use free for small companies and non-commercial open-source projects, with one production issuer.
+Abblix OIDC Server itself is a separate product under its own license, consumed here as a NuGet package and not redistributed in source form. Its terms are at [abblix.com/en/oidc-server/license](https://www.abblix.com/en/oidc-server/license), and the full text is [LICENSE.md](https://github.com/Abblix/Oidc.Server/blob/master/LICENSE.md) in the library's repository. Running these samples costs nothing: the license makes development, testing and staging environments free for everyone. Who may use it free in production is set out in the license itself.
 
 ## 🔗 Contacts and resources
 
 - [Documentation](https://www.abblix.com/en/docs/introduction-to-abblix-oidc-server)
 - [Abblix OIDC Server on GitHub](https://github.com/Abblix/Oidc.Server)
-- [Product page](https://www.abblix.com/abblix-oidc-server)
+- [Product page](https://www.abblix.com/en/oidc-server)
 - General inquiries: [info@abblix.com](mailto:info@abblix.com)
 - Support requests: [support@abblix.com](mailto:support@abblix.com)
 
