@@ -29,6 +29,14 @@ var mcpResource = configuration["McpServer:Resource"]
 var mcpScope = configuration["McpServer:Scope"]
                ?? throw new InvalidOperationException("McpServer:Scope is not configured");
 
+const string clientSecretEncryptionKeySetting = "Provider:ClientSecretEncryptionKey";
+var clientSecretEncryptionKey = configuration[clientSecretEncryptionKeySetting];
+if (string.IsNullOrWhiteSpace(clientSecretEncryptionKey))
+{
+    throw new InvalidOperationException(
+        $"{clientSecretEncryptionKeySetting} is not configured: set it to 32 random bytes, base64");
+}
+
 var userStore = new TestUserStore(
     new TestUser(
         Subject: "1234567890",
@@ -84,6 +92,10 @@ builder.Services.AddOidcServices(options =>
         ],
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
+
+        // The key each issued client_secret is also kept encrypted with, so a client reading its registration
+        // (RFC 7592 section 3) gets its secret back. A tenant serving registration does not start without one.
+        ClientSecretEncryption = new ClientSecretEncryptionSettings { Key = clientSecretEncryptionKey },
     });
 });
 

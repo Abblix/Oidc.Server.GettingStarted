@@ -56,6 +56,7 @@ The first returns `401` with the challenge, the second the resource metadata, an
 ## Before you take it further
 
 - Consent is granted automatically (`AddConsentGrantedForEveryClient`). With open registration any application can become a client, so a real provider shows the user which client is asking and where it will send the code, through an `IUserConsentsProvider` of its own.
+- Use your own client secret encryption key. A provider that serves registration keeps each `client_secret` it issues encrypted with `Provider:ClientSecretEncryptionKey`, so a client reading its registration gets its secret back, and it does not start without the key or with one shorter than 32 bytes. The key in `ProviderApp/appsettings.json` is published with the sample, so it keeps no secret from anyone who can read the stored registrations. Generate 32 random bytes, for example with `openssl rand -base64 32`, and set the key through an environment variable or a secret store rather than in the file.
 - Registered clients live in memory and are gone when the provider restarts. A client holding a `client_id` from before the restart has to register again.
 - Signing keys are generated at startup, so a restarted provider invalidates every token issued before. The MCP server refuses tokens signed with the new key until it fetches the provider's keys again: `JwtBearer` does that by itself on meeting an unknown key, at most once per its refresh interval, a few minutes by default. Restarting the MCP server along with the provider recovers at once.
 - Open registration admits machine clients unless the host narrows the grant types, as `NewClientOptions.AllowedGrantTypes` does here. A provider that drops it hands MCP server tokens to any program that asks.
@@ -63,7 +64,7 @@ The first returns `401` with the challenge, the second the resource metadata, an
 ## Layout
 
 - `ProviderApp/Program.cs`: the tenant with the MCP server as its resource, open registration limited to the grant types acting for a user and granting offline access, and the login endpoints.
-- `ProviderApp/appsettings.json`: the issuer, and the MCP server's resource URI and scope.
+- `ProviderApp/appsettings.json`: the issuer, the client secret encryption key, and the MCP server's resource URI and scope.
 - `McpServerApp/Program.cs`: `JwtBearer` bound to the provider and to the MCP server's own audience and refusing tokens with no user, the MCP authentication scheme with the resource metadata, the scope policy, and `MapMcp`.
 - `McpServerApp/ScopeChallengeHandler.cs`: the SDK's handler with `scope` in its challenges.
 - `McpServerApp/WhoAmITool.cs`: the tool.
