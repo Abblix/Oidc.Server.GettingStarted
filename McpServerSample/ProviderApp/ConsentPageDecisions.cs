@@ -1,8 +1,10 @@
-using System.Collections.Concurrent;
+using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Endpoints.Authorization.Interfaces;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.UserAuthentication;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 
 namespace ProviderApp;
 
@@ -16,19 +18,24 @@ namespace ProviderApp;
 /// can assure the identity of the client application". The section lets an earlier approval stand only for a
 /// client restricted to exact absolute HTTPS redirect URIs, and an MCP client redirects to a loopback http
 /// address. So a decision answers the one request it was given for and is gone once read: the next authorization,
-/// from the same client or any other, goes to the consent page again.
+/// from the same client or any other, goes to the consent page again. A decision whose request never comes back
+/// expires with the stored request it answers.
 /// </remarks>
-public sealed class ConsentPageDecisions(TimeProvider clock) : IUserConsentsProvider
+/// <param name="cache">Where decisions wait for their requests to resume.</param>
+/// <param name="options">The server's options, for how long a stored authorization request lives.</param>
+/// <param name="clock">Stamps a decision, so a request asking for consent with prompt=consent sees it given after
+/// the consent page was opened.</param>
+public sealed class ConsentPageDecisions(IMemoryCache cache, IOptions<OidcOptions> options, TimeProvider clock)
+    : IUserConsentsProvider
 {
-    private readonly ConcurrentDictionary<(string TenantId, string SessionId, string RequestUri), Decision> _decisions
-        = new();
-
     /// <summary>
     /// Records the user's answer on the consent page for the request stored under <paramref name="requestUri"/>.
     /// </summary>
     public void Record(TenantDefinition tenant, AuthSession authSession, Uri requestUri, bool granted)
-        => _decisions[(tenant.Id, authSession.SessionId, requestUri.OriginalString)] =
-            new Decision(granted, clock.GetUtcNow());
+        => cache.Set(
+            Key(tenant, authSession, requestUri),
+            new Decision(granted, clock.GetUtcNow()),
+            options.Value.AuthenticationRequestExpiresIn);
 
     /// <inheritdoc />
     public Task<UserConsents> GetUserConsentsAsync(
@@ -41,10 +48,13 @@ public sealed class ConsentPageDecisions(TimeProvider clock) : IUserConsentsProv
 
         // The request comes back from the consent page under the request_uri the page was opened with
         if (request.RequestUri is not { } requestUri ||
-            !_decisions.TryRemove((tenant.Id, authSession.SessionId, requestUri.OriginalString), out var decision))
+            !cache.TryGetValue<Decision>(Key(tenant, authSession, requestUri), out var decision) ||
+            decision == null)
         {
             return Task.FromResult(new UserConsents { Pending = asked });
         }
+
+        cache.Remove(Key(tenant, authSession, requestUri));
 
         // A consent that grants nothing and leaves nothing pending is the user's refusal: the client gets
         // access_denied
@@ -52,6 +62,11 @@ public sealed class ConsentPageDecisions(TimeProvider clock) : IUserConsentsProv
             ? new UserConsents { Granted = asked, GivenAt = decision.GivenAt }
             : new UserConsents { GivenAt = decision.GivenAt });
     }
+
+    private static DecisionKey Key(TenantDefinition tenant, AuthSession authSession, Uri requestUri)
+        => new(tenant.Id, authSession.SessionId, requestUri.OriginalString);
+
+    private sealed record DecisionKey(string TenantId, string SessionId, string RequestUri);
 
     private sealed record Decision(bool Granted, DateTimeOffset GivenAt);
 }
