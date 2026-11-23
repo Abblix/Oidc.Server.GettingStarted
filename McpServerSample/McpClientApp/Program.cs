@@ -12,6 +12,10 @@ var mcpServer = AbsoluteUri(configuration["Mcp:Server"], "Mcp:Server", Uri.UriSc
 var documentFile = configuration["Client:MetadataDocument"]
                    ?? throw new InvalidOperationException("Client:MetadataDocument is not configured");
 var newTaskTitle = configuration["Demo:NewTask"] ?? throw new InvalidOperationException("Demo:NewTask is not configured");
+var signInTimeout = TimeSpan.TryParse(configuration["Client:SignInTimeout"], out var timeout) && timeout > TimeSpan.Zero
+    ? timeout
+    : throw new InvalidOperationException(
+        $"Client:SignInTimeout is '{configuration["Client:SignInTimeout"]}'; it has to be a positive time span such as 00:05:00");
 
 // The scopes the assistant asks for, or none configured to ask for every scope the tracker names
 var requestedScopes = configuration.GetSection("Scopes").Get<string[]>();
@@ -111,7 +115,12 @@ await using var transport = new HttpClientTransport(
 // it and look again
 try
 {
-    await using var client = await McpClient.CreateAsync(transport, loggerFactory: loggerFactory);
+    // The connection is initialized only after the employee has signed in, so the SDK's wait for it, a minute by
+    // default, has to cover a person reading the sign-in page and typing a password
+    await using var client = await McpClient.CreateAsync(
+        transport,
+        new McpClientOptions { InitializationTimeout = signInTimeout },
+        loggerFactory);
     async Task<CallToolResult> CallAsync(string tool, IReadOnlyDictionary<string, object?>? arguments = null)
     {
         CallToolResult result;
@@ -135,6 +144,19 @@ try
     var created = await CallAsync("create_task", new Dictionary<string, object?> { ["title"] = newTaskTitle });
     await CallAsync("close_task", new Dictionary<string, object?> { ["id"] = TaskId(created) });
     await CallAsync("list_my_tasks");
+}
+catch (TimeoutException)
+{
+    Console.WriteLine($"Stopped: the sign-in did not finish within {signInTimeout} (Client:SignInTimeout)");
+    Environment.ExitCode = 1;
+}
+catch (HttpRequestException exception) when (exception.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+{
+    // A token the provider has just issued and the tracker still refuses: the provider generates its signing keys at
+    // startup, and the tracker holds the key set it fetched before
+    Console.WriteLine("Stopped: the tracker refused the provider's token (401). If the provider was restarted, " +
+                      "restart the tracker too, so it fetches the provider's new signing keys.");
+    Environment.ExitCode = 1;
 }
 catch (Exception exception) when (exception is McpException or HttpRequestException or InvalidOperationException)
 {
