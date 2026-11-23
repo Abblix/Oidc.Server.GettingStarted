@@ -300,11 +300,15 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
     var redirectUri = WebUtility.HtmlEncode(request.RedirectUri?.OriginalString ?? "");
     var redirectHost = WebUtility.HtmlEncode(request.RedirectUri?.Host ?? "");
 
-    // This provider has no configured clients and refuses to register a client_id that is an https URL, so such a
-    // client_id is the address of a metadata document. Its name is the document's claim; the host it is published on
-    // is the one thing the provider checked (draft-ietf-oauth-client-id-metadata-document-03 section 10.10).
-    var origin = Uri.TryCreate(request.ClientId, UriKind.Absolute, out var documentUrl) &&
-                 documentUrl.Scheme == Uri.UriSchemeHttps
+    // This provider has no configured clients, and its registration refuses a client_id starting with https:// as
+    // written, so a client_id of that exact form is the address of a metadata document. Its name is the document's
+    // claim; the host it is published on is the one thing the provider checked (draft-ietf-oauth-client-id-metadata-
+    // document-03 section 10.10). The test is the library's own, character for character: a registered client may
+    // propose HTTPS://... or a padded spelling, which parses as an https URL but was never fetched, and is told apart.
+    var origin = request.ClientId is { } id &&
+                 id.StartsWith("https://", StringComparison.Ordinal) &&
+                 Uri.TryCreate(id, UriKind.Absolute, out var documentUrl) &&
+                 string.Equals(documentUrl.AbsoluteUri, id, StringComparison.Ordinal)
         ? $"Its description is published at <b>{WebUtility.HtmlEncode(documentUrl.Authority)}</b>, and the name is " +
           "that description's claim."
         : "It registered itself with this provider, so the name is its own claim.";
