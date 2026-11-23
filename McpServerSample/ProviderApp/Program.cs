@@ -23,10 +23,8 @@ using UriBuilder = Abblix.Utils.UriBuilder;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
-var issuer = configuration["Provider:Issuer"]
-             ?? throw new InvalidOperationException("Provider:Issuer is not configured");
-var mcpResource = configuration["McpServer:Resource"]
-                  ?? throw new InvalidOperationException("McpServer:Resource is not configured");
+var issuer = HttpsUri(configuration["Provider:Issuer"], "Provider:Issuer");
+var mcpResource = HttpsUri(configuration["McpServer:Resource"], "McpServer:Resource");
 var readScope = configuration["McpServer:Scopes:Read"]
                 ?? throw new InvalidOperationException("McpServer:Scopes:Read is not configured");
 var writeScope = configuration["McpServer:Scopes:Write"]
@@ -82,7 +80,7 @@ var oidcServer = builder.Services.AddOidcServices(options =>
     options.Tenants.Add(new TenantDefinition
     {
         Id = "main",
-        Issuer = new Uri(issuer),
+        Issuer = issuer,
 
         // No pre-registered clients: every MCP client arrives by its metadata document or by dynamic registration
         Clients = [],
@@ -95,7 +93,7 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         Resources =
         [
             new ResourceDefinition(
-                new Uri(mcpResource, UriKind.Absolute),
+                mcpResource,
                 new ScopeDefinition(readScope),
                 new ScopeDefinition(writeScope)),
         ],
@@ -183,6 +181,13 @@ app.MapPost("/Auth/Login", async (
     .DisableAntiforgery();
 
 app.Run();
+
+static Uri HttpsUri(string? value, string name)
+    => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+        ? uri
+        : throw new InvalidOperationException(value is null
+            ? $"{name} is not configured"
+            : $"{name} is '{value}'; it has to be an absolute https URL");
 
 static string LoginPage(AntiforgeryTokenSet tokens, string? requestUri, string? error)
 {

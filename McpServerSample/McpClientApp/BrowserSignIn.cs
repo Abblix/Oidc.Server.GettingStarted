@@ -7,7 +7,7 @@ namespace McpClientApp;
 /// Prints the authorization URL for the user to open in a browser and waits for the provider's redirect, which this
 /// app receives on its loopback redirect URI.
 /// </summary>
-public sealed class BrowserSignIn(Uri redirectUri) : ISignIn
+public sealed class BrowserSignIn(string clientName, Uri redirectUri) : ISignIn
 {
     private readonly TaskCompletionSource<AuthorizationResult> _response =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -51,9 +51,9 @@ public sealed class BrowserSignIn(Uri redirectUri) : ISignIn
             $"""
              <!DOCTYPE html>
              <html>
-             <head><title>Example Assistant</title></head>
+             <head><title>{WebUtility.HtmlEncode(clientName)}</title></head>
              <body>
-                 <h1>Example Assistant</h1>
+                 <h1>{WebUtility.HtmlEncode(clientName)}</h1>
                  <p>{WebUtility.HtmlEncode(message)}</p>
                  <p>Redirect URI: {WebUtility.HtmlEncode(redirectUri.ToString())}</p>
              </body>

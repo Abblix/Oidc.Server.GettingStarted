@@ -6,10 +6,10 @@ using ModelContextProtocol.AspNetCore.Authentication;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
-var resource = new Uri(configuration["Mcp:Resource"]
-                       ?? throw new InvalidOperationException("Mcp:Resource is not configured"));
-var authorizationServer = configuration["Mcp:AuthorizationServer"]
-                          ?? throw new InvalidOperationException("Mcp:AuthorizationServer is not configured");
+var resource = HttpsUri(configuration["Mcp:Resource"], "Mcp:Resource");
+var authorizationServer = HttpsUri(configuration["Mcp:AuthorizationServer"], "Mcp:AuthorizationServer").OriginalString;
+var resourceName = configuration["Mcp:ResourceName"]
+                   ?? throw new InvalidOperationException("Mcp:ResourceName is not configured");
 var readScope = configuration["Mcp:Scopes:Read"]
                 ?? throw new InvalidOperationException("Mcp:Scopes:Read is not configured");
 var writeScope = configuration["Mcp:Scopes:Write"]
@@ -74,7 +74,7 @@ builder.Services
                 Resource = resource.OriginalString,
                 AuthorizationServers = { authorizationServer },
                 ScopesSupported = [readScope, writeScope],
-                ResourceName = "McpServerSample task tracker",
+                ResourceName = resourceName,
             };
         });
 
@@ -113,9 +113,17 @@ app.UseAuthorization();
 
 // After the endpoint's own check that a valid token came with the request: a call to a tool the token's scope does
 // not cover is answered 403 with the scope it needs
-var gate = ActivatorUtilities.CreateInstance<ToolScopeGate>(app.Services, new PathString(resource.AbsolutePath), policyScopes);
+var gate = ActivatorUtilities.CreateInstance<ToolScopeGate>(app.Services, policyScopes);
 app.Use(gate.InvokeAsync);
 
-app.MapMcp(resource.AbsolutePath).RequireAuthorization();
+// The gate acts on the endpoint carrying it, so every path spelling routing sends here (/mcp/ included) passes it
+app.MapMcp(resource.AbsolutePath).RequireAuthorization().WithMetadata(gate);
 
 app.Run();
+
+static Uri HttpsUri(string? value, string name)
+    => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+        ? uri
+        : throw new InvalidOperationException(value is null
+            ? $"{name} is not configured"
+            : $"{name} is '{value}'; it has to be an absolute https URL");

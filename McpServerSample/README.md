@@ -120,7 +120,7 @@ On the tracker side (`McpServerApp/Program.cs`), using the official C# MCP SDK (
 
 - The SDK's MCP authentication scheme publishes the protected resource metadata at `/.well-known/oauth-protected-resource/mcp`, the address RFC 9728 derives from the resource `https://localhost:5008/mcp`.
 - `JwtBearer` validates the token. Its `Authority` is the provider, so the signing keys and the issuer come from the provider's metadata. Its `Audience` is the tracker's own resource URI. A token issued for another resource, or for none, gets `401`, and so does a token that carries no user: one whose subject is missing or is the client itself, as a `client_credentials` token's is. A token that is not an access token (`typ` `at+jwt`) is refused too.
-- Each tool names its policy with `[Authorize]`, and each policy is satisfied by one scope from the settings. `ToolScopeGate` answers a call that fails its tool's policy with 403 and that policy's scope, before the SDK dispatches the call. The SDK's own authorization filters stay on behind it and keep a tool the token cannot use out of `tools/list`, but on their own they refuse inside the JSON-RPC response, which a client cannot step up from.
+- Each tool names its policy with `[Authorize]`, and each policy is satisfied by one scope from the settings. `ToolScopeGate` answers a call that fails its tool's policy with 403 and that policy's scope, before the SDK dispatches the call. It is attached to the endpoint `MapMcp` maps, so every path that routes there passes it, and it reads the request with the SDK's own message types, so it sees the tool the SDK would call. The SDK's own authorization filters stay on behind it and keep a tool the token cannot use out of `tools/list`, but on their own they refuse inside the JSON-RPC response, which a client cannot step up from.
 - `ScopeChallengeHandler` adds the `scope` parameter to the SDK's challenge, which the specification recommends, and `error="invalid_token"` when the request carried a token that was refused.
 
 On the assistant side (`McpClientApp/Program.cs`), using the C# MCP SDK client (`ModelContextProtocol.Core`):
@@ -190,7 +190,7 @@ The first returns `401` with the challenge, the second the resource metadata, an
 - `McpServerApp/ToolScopeGate.cs`: the 403 naming the scope a tool needs.
 - `McpServerApp/ScopeChallengeHandler.cs`: the SDK's handler with `scope` in its challenges.
 - `McpServerApp/WhoAmITool.cs`: the tool answering from the token.
-- `McpServerApp/appsettings.json`: the resource URI, the authorization server, the scopes and the seed tasks.
+- `McpServerApp/appsettings.json`: the resource URI and name, the authorization server, the scopes and the seed tasks.
 - `McpClientApp/client-metadata.json`: the vendor's metadata document.
 - `McpClientApp/Program.cs`: serving the document, the SDK's OAuth options both ways, and the calls the assistant makes.
 - `McpClientApp/BrowserSignIn.cs`, `McpClientApp/HeadlessSignIn.cs`: the two ways the employee signs in.

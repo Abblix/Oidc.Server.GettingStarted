@@ -1,9 +1,10 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
+using ModelContextProtocol;
 using ModelContextProtocol.AspNetCore.Authentication;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace McpServerApp;
@@ -17,11 +18,11 @@ namespace McpServerApp;
 /// WWW-Authenticate header carrying error="insufficient_scope" and the scope "needed to satisfy the current operation",
 /// which a client acting for a user answers by asking the user for that scope (step-up authorization). The SDK's own
 /// authorization filters refuse such a call inside the JSON-RPC response instead, which a client cannot step up from.
-/// The policy each tool needs is the one its [Authorize] attribute names, read from the SDK's own tool registry, and
-/// the SDK's filters stay on behind this gate.
+/// The gate runs on the endpoint MapMcp maps it to, whatever path spelling routed there, reads the request the way the
+/// SDK reads it, and takes the policy each tool needs from the tool's [Authorize] attribute in the SDK's own registry.
+/// The SDK's filters stay on behind it.
 /// </remarks>
 public sealed class ToolScopeGate(
-    PathString mcpPath,
     IReadOnlyDictionary<string, string> policyScopes,
     IOptions<McpServerOptions> serverOptions,
     IAuthorizationService authorization)
@@ -33,7 +34,8 @@ public sealed class ToolScopeGate(
 
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
-        if (context.Request.Path == mcpPath && HttpMethods.IsPost(context.Request.Method) &&
+        if (context.GetEndpoint()?.Metadata.GetMetadata<ToolScopeGate>() is not null &&
+            HttpMethods.IsPost(context.Request.Method) &&
             await CalledToolAsync(context.Request) is { } tool &&
             serverOptions.Value.ToolCollection?.TryGetPrimitive(tool, out var serverTool) is true)
         {
@@ -52,24 +54,24 @@ public sealed class ToolScopeGate(
     }
 
     /// <summary>
-    /// The tool a tools/call request names, or null for any other request; the body is left for the SDK to read again.
+    /// The tool a tools/call request names, read with the SDK's own message types and serializer options so the gate
+    /// and the dispatcher read the same name; null for any other request, which the body is left for the SDK to answer.
     /// </summary>
     private static async Task<string?> CalledToolAsync(HttpRequest request)
     {
         request.EnableBuffering();
         try
         {
-            var message = await JsonNode.ParseAsync(request.Body);
-            return message is JsonObject call &&
-                   call["method"] is JsonValue method && method.TryGetValue<string>(out var name) &&
-                   name == "tools/call" &&
-                   call["params"]?["name"] is JsonValue toolName && toolName.TryGetValue<string>(out var tool)
-                ? tool
+            var message = await JsonSerializer.DeserializeAsync<JsonRpcMessage>(
+                request.Body, McpJsonUtilities.DefaultOptions, request.HttpContext.RequestAborted);
+
+            return message is JsonRpcRequest { Method: RequestMethods.ToolsCall, Params: { } parameters }
+                ? parameters.Deserialize<CallToolRequestParams>(McpJsonUtilities.DefaultOptions)?.Name
                 : null;
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or ArgumentException or NotSupportedException)
         {
-            // Not JSON: the SDK answers it with its own parse error
+            // A body the SDK's serializer cannot read: the SDK answers it with its own error
             return null;
         }
         finally

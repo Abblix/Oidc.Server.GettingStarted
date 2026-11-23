@@ -43,7 +43,7 @@ builder.WebHost.UseUrls(clientId.GetLeftPart(UriPartial.Authority), redirectUri.
 
 ISignIn signIn = configuration["SignIn"] switch
 {
-    "browser" => new BrowserSignIn(redirectUri),
+    "browser" => new BrowserSignIn(clientName, redirectUri),
     "headless" => new HeadlessSignIn(
         redirectUri,
         configuration["HeadlessSignIn:Email"]
@@ -106,43 +106,44 @@ Console.WriteLine(useMetadataDocument
 await using var transport = new HttpClientTransport(
     new HttpClientTransportOptions { Endpoint = mcpServer, OAuth = oauth },
     loggerFactory);
-await using var client = await McpClient.CreateAsync(transport, loggerFactory: loggerFactory);
 
-// What the assistant does for the employee: look at the list, add a task, close it, look again
+// What the assistant does for the employee: sign in through the provider, then look at the list, add a task, close
+// it and look again
 try
 {
+    await using var client = await McpClient.CreateAsync(transport, loggerFactory: loggerFactory);
+    async Task<CallToolResult> CallAsync(string tool, IReadOnlyDictionary<string, object?>? arguments = null)
+    {
+        CallToolResult result;
+        try
+        {
+            result = await client.CallToolAsync(tool, arguments);
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            // The tracker's 403 for a scope the employee did not grant, once the SDK found no scope to step up to
+            throw new McpException($"{tool} was refused by the tracker (403): the token lacks the scope it needs");
+        }
+
+        var text = string.Join('\n', result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+        Console.WriteLine($"{tool}: {text}");
+        return result.IsError is true ? throw new McpException($"{tool} failed: {text}") : result;
+    }
+
     await CallAsync("who_am_i");
     await CallAsync("list_my_tasks");
     var created = await CallAsync("create_task", new Dictionary<string, object?> { ["title"] = newTaskTitle });
     await CallAsync("close_task", new Dictionary<string, object?> { ["id"] = TaskId(created) });
     await CallAsync("list_my_tasks");
 }
-catch (Exception exception) when (exception is McpException or HttpRequestException)
+catch (Exception exception) when (exception is McpException or HttpRequestException or InvalidOperationException)
 {
-    Console.WriteLine($"Refused: {exception.Message}");
+    Console.WriteLine($"Stopped: {exception.Message}");
     Environment.ExitCode = 1;
 }
 
 await app.StopAsync();
 return;
-
-async Task<CallToolResult> CallAsync(string tool, IReadOnlyDictionary<string, object?>? arguments = null)
-{
-    CallToolResult result;
-    try
-    {
-        result = await client.CallToolAsync(tool, arguments);
-    }
-    catch (HttpRequestException exception)
-    {
-        // The tracker's 403 for a scope the employee did not grant, once the SDK found no scope to step up to
-        throw new HttpRequestException($"{tool} was refused: {exception.Message}", exception, exception.StatusCode);
-    }
-
-    var text = string.Join('\n', result.Content.OfType<TextContentBlock>().Select(block => block.Text));
-    Console.WriteLine($"{tool}: {text}");
-    return result.IsError is true ? throw new McpException($"{tool} failed: {text}") : result;
-}
 
 // create_task answers with the task as structured content
 static int TaskId(CallToolResult created)
