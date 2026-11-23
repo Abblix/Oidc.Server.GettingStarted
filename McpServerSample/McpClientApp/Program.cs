@@ -53,7 +53,13 @@ ISignIn signIn = configuration["SignIn"] switch
         configuration["HeadlessSignIn:Email"]
         ?? throw new InvalidOperationException("HeadlessSignIn:Email is not configured"),
         configuration["HeadlessSignIn:Password"]
-        ?? throw new InvalidOperationException("HeadlessSignIn:Password is not configured")),
+        ?? throw new InvalidOperationException("HeadlessSignIn:Password is not configured"),
+        configuration["HeadlessSignIn:Consent"] switch
+        {
+            "allow" => "allow",
+            "deny" => "deny",
+            var other => throw new InvalidOperationException($"HeadlessSignIn:Consent is '{other}'; use allow or deny"),
+        }),
     var other => throw new InvalidOperationException($"SignIn is '{other}'; use browser or headless"),
 };
 

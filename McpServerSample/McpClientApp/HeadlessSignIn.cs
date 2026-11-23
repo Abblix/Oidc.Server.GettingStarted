@@ -8,10 +8,11 @@ namespace McpClientApp;
 
 /// <summary>
 /// Plays the user's browser without one: follows the provider's redirects to its login page, posts the form with the
-/// demo user's credentials and reads the code from the redirect back to <paramref name="redirectUri"/>, which it never
-/// requests. For running the flow unattended against the sample provider, whose login form it knows.
+/// demo user's credentials, answers the consent page with <paramref name="consent"/> (allow or deny), and reads the
+/// response from the redirect back to <paramref name="redirectUri"/>, which it never requests. For running the flow
+/// unattended against the sample provider, whose login form and consent page it knows.
 /// </summary>
-public sealed class HeadlessSignIn(Uri redirectUri, string email, string password) : ISignIn
+public sealed class HeadlessSignIn(Uri redirectUri, string email, string password, string consent) : ISignIn
 {
     private const int MaxRedirects = 10;
 
@@ -26,36 +27,66 @@ public sealed class HeadlessSignIn(Uri redirectUri, string email, string passwor
         });
 
         var (loginPage, loginUri) = await FollowAsync(browser, context.AuthorizationUri, cancellationToken);
-        var form = await new HtmlParser().ParseDocumentAsync(loginPage, cancellationToken) is var page &&
-                   page.QuerySelector("form") is IHtmlFormElement found
-            ? found
-            : throw new InvalidOperationException($"No login form at {loginUri}");
+        var (consentPage, consentUri) = await SubmitAsync(
+            browser, loginPage, loginUri, new() { ["email"] = email, ["password"] = password }, cancellationToken);
 
-        var fields = form.Elements.OfType<IHtmlInputElement>()
-            .Where(input => !string.IsNullOrEmpty(input.Name))
-            .ToDictionary(input => input.Name!, input => input.Value);
-        fields["email"] = email;
-        fields["password"] = password;
-
-        using var posted = await browser.PostAsync(
-            new Uri(loginUri, form.GetAttribute("action")),
-            new FormUrlEncodedContent(fields),
-            cancellationToken);
-        var (_, redirect) = await FollowAsync(browser, loginUri, cancellationToken, posted);
-
-        // A refused sign-in (wrong credentials, an expired form) answers the login page again rather than redirecting
-        if (redirect.GetLeftPart(UriPartial.Path) != redirectUri.GetLeftPart(UriPartial.Path))
+        // A refused sign-in (wrong credentials, an expired form) answers the login page again, which has no decision
+        if (!IsAt(consentUri) && !await IsConsentPageAsync(consentPage, cancellationToken))
         {
             throw new InvalidOperationException(
-                $"The sign-in did not lead back to the redirect URI but to {redirect}; check HeadlessSignIn:Email and " +
+                $"The sign-in did not lead to the consent page but to {consentUri}; check HeadlessSignIn:Email and " +
                 "HeadlessSignIn:Password against the provider's demo user");
         }
+
+        var redirect = consentUri;
+        if (!IsAt(redirect))
+        {
+            (_, redirect) = await SubmitAsync(
+                browser, consentPage, consentUri, new() { ["decision"] = consent }, cancellationToken);
+        }
+
+        if (!IsAt(redirect))
+            throw new InvalidOperationException($"The consent page did not lead back to the redirect URI but to {redirect}");
 
         var query = HttpUtility.ParseQueryString(redirect.Query);
         if (query["error"] is { } error)
             throw new InvalidOperationException($"The provider answered {error}: {query["error_description"]}");
 
         return new AuthorizationResult { Code = query["code"], State = query["state"], Iss = query["iss"] };
+    }
+
+    private bool IsAt(Uri uri) => uri.GetLeftPart(UriPartial.Path) == redirectUri.GetLeftPart(UriPartial.Path);
+
+    private static async Task<bool> IsConsentPageAsync(string page, CancellationToken cancellationToken)
+        => (await new HtmlParser().ParseDocumentAsync(page, cancellationToken)).QuerySelector("button[name=decision]") is not null;
+
+    /// <summary>
+    /// Posts the form on <paramref name="page"/> with its hidden fields and <paramref name="values"/>, and follows the
+    /// answer as <see cref="FollowAsync"/> does.
+    /// </summary>
+    private async Task<(string Page, Uri Uri)> SubmitAsync(
+        HttpClient browser,
+        string page,
+        Uri pageUri,
+        Dictionary<string, string> values,
+        CancellationToken cancellationToken)
+    {
+        var form = (await new HtmlParser().ParseDocumentAsync(page, cancellationToken)).QuerySelector("form")
+                       as IHtmlFormElement
+                   ?? throw new InvalidOperationException($"No form at {pageUri}");
+
+        var fields = form.Elements.OfType<IHtmlInputElement>()
+            .Where(input => !string.IsNullOrEmpty(input.Name))
+            .ToDictionary(input => input.Name!, input => input.Value);
+        foreach (var (name, value) in values)
+            fields[name] = value;
+
+        var posted = await browser.PostAsync(
+            new Uri(pageUri, form.GetAttribute("action")),
+            new FormUrlEncodedContent(fields),
+            cancellationToken);
+        using (posted)
+            return await FollowAsync(browser, pageUri, cancellationToken, posted);
     }
 
     /// <summary>
