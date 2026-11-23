@@ -238,9 +238,12 @@ app.MapGet("/Auth/Consent", async (
     if (request == null)
         return Results.Content(ExpiredPage(), "text/html");
 
-    var client = await clientInfoProvider.TryFindClientAsync(tenant, request.ClientId!);
+    // The authorization endpoint already found the client before sending the user here, so the name is only looked up
+    var clientName = (await clientInfoProvider.FindClientAsync(tenant, request.ClientId!)).TryGetSuccess(out var client)
+        ? client.ClientName
+        : null;
     return Results.Content(
-        ConsentPage(antiforgery.GetAndStoreTokens(context), requestUri, request, client?.ClientName),
+        ConsentPage(antiforgery.GetAndStoreTokens(context), requestUri, request, clientName),
         "text/html");
 });
 
