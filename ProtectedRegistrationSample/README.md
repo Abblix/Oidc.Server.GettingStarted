@@ -21,8 +21,8 @@ On the client side (`RegistrationClientApp/Program.cs`):
 - It reads `registration_endpoint` from the provider's metadata.
 - It uses `registration_client_uri` exactly as the registration response gives it. RFC 7592 Appendix B: "The client MUST use the URL as given by the server and MUST NOT construct this URL from component pieces."
 - The update is the registration it last read, `client_id` and `client_secret` included, with only the changed field replaced. RFC 7592 section 2.2: "This request MUST include all client metadata fields as returned to the client from a previous registration, read, or update operation. The updated client metadata fields request MUST NOT include the "registration_access_token", "registration_client_uri", "client_secret_expires_at", or "client_id_issued_at" fields". A field left out would be deleted from the registration.
-- It keeps the `client_secret` that each read and update returns, and uses it for the next token request. Appendix A.1 lets the provider issue a new secret in either response, and section 2.2 says "the client MUST immediately discard its previous client secret". The secret also travels in the update, which section 2.2 allows on one condition: "If the client includes the "client_secret" field in the request, the value of this field MUST match the currently issued client secret for that client."
-- The update returns a new registration access token, and the client switches to it. The old one stops working at once.
+- It keeps the `client_secret` and the registration access token that each read and update returns, and uses them for the next request. Appendix A.1 lets the provider issue new ones in either response, and sections 2.1 and 2.2 say "the client MUST immediately discard its previous client secret and/or registration access token". The secret also travels in the update, which section 2.2 allows on one condition: "If the client includes the "client_secret" field in the request, the value of this field MUST match the currently issued client secret for that client."
+- The update returns a new registration access token, and the old one stops working at once.
 
 ## Run it
 
@@ -56,8 +56,8 @@ curl -k -X POST https://localhost:5011/operator/initial-access-tokens \
 ```json
 {
   "initial_access_token": "eyJ0eX...",
-  "jti": "xpH_fn8uaB5etMSJXV5VpvkcUok5-qczWhYp5Yx-O5ExzuBM3BHzioqU_uTRr2ej9DLoIQ6S4KtPR63aNebLtA",
-  "expires_at": "2026-11-23T12:08:18+00:00"
+  "jti": "SH7eWtvw-sqIt7bkqnZC8BzMFhqInT_bKblfxjxzIrymqA0UveoNXDr9rGymIUgieb2FeUTedgnhQHuFdZxeLQ",
+  "expires_at": "2026-11-23T12:16:38+00:00"
 }
 ```
 
@@ -108,7 +108,7 @@ A request with no token at all gets a challenge with no error code, as RFC 6750 
 ```
 === 2. Register with the initial access token
 > POST https://localhost:5011/connect/register
-> Authorization: Bearer eyJ0eX...NqABAA
+> Authorization: Bearer eyJ0eX...W4gV7Q
 {
   "client_name": "Partner A reporting job",
   "grant_types": [
@@ -119,12 +119,12 @@ A request with no token at all gets a challenge with no error code, as RFC 6750 
 }
 < 201 Created
 {
-  "client_id": "nj8guujjddqptfhipnhg",
-  "client_secret": "WRZCBH...G2ATZN",
-  "registration_access_token": "eyJ0eX...7w167g",
-  "registration_client_uri": "https://localhost:5011/connect/register/nj8guujjddqptfhipnhg",
-  "client_id_issued_at": 1795435098,
-  "client_secret_expires_at": 1798027098,
+  "client_id": "0c5fjflnckfgqo45esog",
+  "client_secret": "3XYTY3...UEXA4V",
+  "registration_access_token": "eyJ0eX...JvggKQ",
+  "registration_client_uri": "https://localhost:5011/connect/register/0c5fjflnckfgqo45esog",
+  "client_id_issued_at": 1795435599,
+  "client_secret_expires_at": 1798027599,
   "token_endpoint_auth_method": "client_secret_basic",
   "grant_types": [
     "client_credentials"
@@ -137,7 +137,7 @@ A request with no token at all gets a challenge with no error code, as RFC 6750 
 
 === 3. Register a client that sends no credential (token_endpoint_auth_method none): refused
 > POST https://localhost:5011/connect/register
-> Authorization: Bearer eyJ0eX...NqABAA
+> Authorization: Bearer eyJ0eX...W4gV7Q
 {
   "client_name": "Partner A reporting job",
   "grant_types": [
@@ -155,11 +155,11 @@ A request with no token at all gets a challenge with no error code, as RFC 6750 
 
 === 4. Get a token as the registered client
 > POST https://localhost:5011/connect/token
-> Authorization: Basic bmo4Z3...FUWk4=
+> Authorization: Basic MGM1Zm...hBNFY=
 grant_type=client_credentials
 < 200 OK
 {
-  "access_token": "eyJ0eX..._FielQ",
+  "access_token": "eyJ0eX...iGynAA",
   "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
   "token_type": "Bearer",
   "expires_in": 600
@@ -171,15 +171,15 @@ The registered client works at the token endpoint straight away. Next it reads i
 
 ```
 === 5. Read the registration
-> GET https://localhost:5011/connect/register/nj8guujjddqptfhipnhg
-> Authorization: Bearer eyJ0eX...7w167g
+> GET https://localhost:5011/connect/register/0c5fjflnckfgqo45esog
+> Authorization: Bearer eyJ0eX...JvggKQ
 < 200 OK
 {
-  "client_id": "nj8guujjddqptfhipnhg",
-  "client_secret": "WRZCBH...G2ATZN",
-  "client_secret_expires_at": 1798027098,
-  "registration_client_uri": "https://localhost:5011/connect/register/nj8guujjddqptfhipnhg",
-  "registration_access_token": "eyJ0eX...q9qfvQ",
+  "client_id": "0c5fjflnckfgqo45esog",
+  "client_secret": "3XYTY3...UEXA4V",
+  "client_secret_expires_at": 1798027599,
+  "registration_client_uri": "https://localhost:5011/connect/register/0c5fjflnckfgqo45esog",
+  "registration_access_token": "eyJ0eX...JvggKQ",
   "token_endpoint_auth_method": "client_secret_basic",
   "grant_types": [
     "client_credentials"
@@ -191,16 +191,16 @@ The registered client works at the token endpoint straight away. Next it reads i
   as expected: 200
 ```
 
-The read carries the `client_secret` the registration issued (`...G2ATZN`), and the client keeps it as its secret. The `client_id_issued_at` of the registration response is not in it. The read also issues the registration access token anew, with the same identifier, so the one the client presented keeps working and the client goes on with it.
+The read carries the `client_secret` the registration issued (`...UEXA4V`) and a registration access token. The client takes both from the response and uses them from here on: RFC 7592 section 2.1 lets a read return a new secret or token, and then "the client MUST immediately discard its previous client secret and/or registration access token". This provider returns the same secret, and a token with the same identifier as the one presented. The `client_id_issued_at` of the registration response is not in the read.
 
 The update is built from the read. First the client tries a `client_secret` of its own choosing:
 
 ```
 === 6. Update the registration with a client_secret of the client's own choosing: refused
-> PUT https://localhost:5011/connect/register/nj8guujjddqptfhipnhg
-> Authorization: Bearer eyJ0eX...7w167g
+> PUT https://localhost:5011/connect/register/0c5fjflnckfgqo45esog
+> Authorization: Bearer eyJ0eX...JvggKQ
 {
-  "client_id": "nj8guujjddqptfhipnhg",
+  "client_id": "0c5fjflnckfgqo45esog",
   "client_secret": "a-secr...-chose",
   ...
 }
@@ -212,15 +212,15 @@ The update is built from the read. First the client tries a `client_secret` of i
   as expected: 400
 ```
 
-RFC 7592 section 2.2: "The client MUST NOT be allowed to overwrite its existing client secret with its own chosen value." The refused update changes nothing, so the next one goes out with the same registration access token and the secret from the read:
+RFC 7592 section 2.2: "The client MUST NOT be allowed to overwrite its existing client secret with its own chosen value." The refused update changes nothing, so the next one goes out with the same token and the secret from the read:
 
 ```
 === 7. Update the registration: a new client_name
-> PUT https://localhost:5011/connect/register/nj8guujjddqptfhipnhg
-> Authorization: Bearer eyJ0eX...7w167g
+> PUT https://localhost:5011/connect/register/0c5fjflnckfgqo45esog
+> Authorization: Bearer eyJ0eX...JvggKQ
 {
-  "client_id": "nj8guujjddqptfhipnhg",
-  "client_secret": "WRZCBH...G2ATZN",
+  "client_id": "0c5fjflnckfgqo45esog",
+  "client_secret": "3XYTY3...UEXA4V",
   "token_endpoint_auth_method": "client_secret_basic",
   "grant_types": [
     "client_credentials"
@@ -231,52 +231,52 @@ RFC 7592 section 2.2: "The client MUST NOT be allowed to overwrite its existing 
 }
 < 200 OK
 {
-  "client_id": "nj8guujjddqptfhipnhg",
-  "client_secret": "WRZCBH...G2ATZN",
-  "client_secret_expires_at": 1798027098,
-  "registration_client_uri": "https://localhost:5011/connect/register/nj8guujjddqptfhipnhg",
-  "registration_access_token": "eyJ0eX...m7XmXQ",
+  "client_id": "0c5fjflnckfgqo45esog",
+  "client_secret": "3XYTY3...UEXA4V",
+  "client_secret_expires_at": 1798027599,
+  "registration_client_uri": "https://localhost:5011/connect/register/0c5fjflnckfgqo45esog",
+  "registration_access_token": "eyJ0eX...gJcufQ",
   "client_name": "Partner A nightly reporting job",
   ...
 }
   as expected: 200
 
 === 8. Read with the registration access token the update replaced: refused
-> GET https://localhost:5011/connect/register/nj8guujjddqptfhipnhg
-> Authorization: Bearer eyJ0eX...7w167g
+> GET https://localhost:5011/connect/register/0c5fjflnckfgqo45esog
+> Authorization: Bearer eyJ0eX...JvggKQ
 < 401 Unauthorized
 < WWW-Authenticate: Bearer error="invalid_token", error_description="The access token unauthorized"
   as expected: 401
 ```
 
-The update returned a new registration access token (`...m7XmXQ`), and the one it replaced (`...7w167g`) is refused from then on. RFC 7592 section 2.2: "If the authorization server includes a new client secret and/or registration access token in its response, the client MUST immediately discard its previous client secret and/or registration access token." The secret in the update response is the one the client already holds, and the client keeps it.
+The update returned a new registration access token (`...gJcufQ`), and the one it replaced (`...JvggKQ`) is refused from then on. RFC 7592 section 2.2: "If the authorization server includes a new client secret and/or registration access token in its response, the client MUST immediately discard its previous client secret and/or registration access token." The secret in the update response is the one the client already holds, and the client keeps it.
 
-The client then registers a second client with the same initial access token, and reads that registration with its own registration access token (`...3zfqbA`) to show the token works. Then it uses that token on the first client's registration:
+The client then registers a second client with the same initial access token, and reads that registration with its own registration access token (`...vXYeHQ`) to show the token works. Then it uses that token on the first client's registration:
 
 ```
 === 11. Delete the first registration with the second client's registration access token: refused
-> DELETE https://localhost:5011/connect/register/nj8guujjddqptfhipnhg
-> Authorization: Bearer eyJ0eX...3zfqbA
+> DELETE https://localhost:5011/connect/register/0c5fjflnckfgqo45esog
+> Authorization: Bearer eyJ0eX...vXYeHQ
 < 401 Unauthorized
 < WWW-Authenticate: Bearer error="invalid_token", error_description="The access token unauthorized"
   as expected: 401
 
 === 12. Delete the first registration with its own registration access token
-> DELETE https://localhost:5011/connect/register/nj8guujjddqptfhipnhg
-> Authorization: Bearer eyJ0eX...m7XmXQ
+> DELETE https://localhost:5011/connect/register/0c5fjflnckfgqo45esog
+> Authorization: Bearer eyJ0eX...gJcufQ
 < 204 No Content
   as expected: 204
 
 === 13. Read the deleted registration: refused
-> GET https://localhost:5011/connect/register/nj8guujjddqptfhipnhg
-> Authorization: Bearer eyJ0eX...m7XmXQ
+> GET https://localhost:5011/connect/register/0c5fjflnckfgqo45esog
+> Authorization: Bearer eyJ0eX...gJcufQ
 < 401 Unauthorized
 < WWW-Authenticate: Bearer error="invalid_token", error_description="The access token unauthorized"
   as expected: 401
 
 === 14. Get a token as the deleted client: refused
 > POST https://localhost:5011/connect/token
-> Authorization: Basic bmo4Z3...FUWk4=
+> Authorization: Basic MGM1Zm...hBNFY=
 grant_type=client_credentials
 < 401 Unauthorized
 < WWW-Authenticate: Basic realm="https://localhost:5011"

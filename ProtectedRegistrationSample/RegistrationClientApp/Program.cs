@@ -86,9 +86,10 @@ var current = await exchange.SendAsync(
 if (current == null)
     return Stopped("the registration could not be read");
 
-// RFC 7592 Appendix A.1: the provider may issue a new client_secret in any read or update response, so the client
-// keeps the one each response carries
+// RFC 7592 section 2.1: a read may return a new client_secret and registration access token, and the client must
+// discard the previous ones, so it keeps those each response carries
 clientSecret = Member(current, "client_secret");
+registrationAccessToken = Member(current, "registration_access_token");
 
 // RFC 7592 section 2.2: the update carries every field the read returned, client_id and client_secret included,
 // except the four the provider owns; a field left out would be deleted from the registration

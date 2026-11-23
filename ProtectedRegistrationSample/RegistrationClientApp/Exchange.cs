@@ -21,8 +21,8 @@ public sealed class Exchange(HttpClient http)
 
     private const int ShownCredentialLength = 6;
 
-    // Relaxed escaping prints an apostrophe in an error_description as itself rather than as '. The output goes
-    // to a console, never into an HTML page, so nothing here needs the default escaping.
+    // Relaxed escaping prints an apostrophe in an error_description as itself rather than as a Unicode escape. The
+    // output goes to a console, never into an HTML page, so nothing here needs the default escaping.
     private static readonly JsonSerializerOptions Indented = new()
     {
         WriteIndented = true,
