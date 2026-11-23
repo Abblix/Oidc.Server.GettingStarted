@@ -34,9 +34,15 @@ public sealed class ScopeChallengeHandler(
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
     {
+        // The specification: "servers SHOULD include the scopes needed to satisfy the current operation in the scope
+        // parameter". ToolScopeGate names the scope of the tool called; any other refusal names every scope.
+        var scope = properties.Items.TryGetValue(ToolScopeGate.ScopeProperty, out var needed) && needed is not null
+            ? needed
+            : Scope;
+
         Response.StatusCode = StatusCodes.Status403Forbidden;
         Response.Headers.WWWAuthenticate =
-            $"Bearer error=\"insufficient_scope\", scope=\"{Scope}\", resource_metadata=\"{MetadataUri}\"";
+            $"Bearer error=\"insufficient_scope\", scope=\"{scope}\", resource_metadata=\"{MetadataUri}\"";
         return Task.CompletedTask;
     }
 
