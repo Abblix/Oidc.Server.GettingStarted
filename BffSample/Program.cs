@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using BffSample;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Yarp.ReverseProxy.Transforms;
 
@@ -16,6 +17,7 @@ const string ResourceKey = "OpenIdConnect:Resource";
 const string ResourceParameter = "resource";
 
 const string ContentSecurityPolicyKey = "ContentSecurityPolicy";
+const string LogoutTicketLifetimeKey = "LogoutTicketLifetime";
 
 // Everything the SPA calls on the BFF lies under this path, and the SPA's own pages outside it
 const string BffPath = "/bff";
@@ -51,19 +53,27 @@ builder.Services
         };
 
         // Logout is a POST carrying the CSRF header, so the SPA sends it with fetch, and a fetch cannot take the
-        // browser to the provider's end-session endpoint. The handler's redirect is answered as the address
-        // instead, with the state it would have put there, and the SPA navigates to it.
+        // browser to the provider's end-session endpoint. The address, with the state the handler would have put
+        // there, waits on the server under a ticket, because it carries the ID token as id_token_hint; the SPA gets
+        // an address of the BFF's own to navigate to, which redirects to the provider (see BffController).
         options.Events.OnRedirectToIdentityProviderForSignOut = async context =>
         {
             context.ProtocolMessage.State = context.Options.StateDataFormat.Protect(context.Properties);
-            await context.Response.WriteAsJsonAsync(
-                new { endSessionUrl = context.ProtocolMessage.CreateLogoutRequestUrl() });
+            var tickets = context.HttpContext.RequestServices.GetRequiredService<LogoutTickets>();
+            var ticket = tickets.Issue(context.ProtocolMessage.CreateLogoutRequestUrl());
+            await context.Response.WriteAsJsonAsync(new { next = $"{BffPath}/logout/continue?ticket={ticket}" });
             context.HandleResponse();
         };
     });
 
 builder.Services.AddControllers();
 builder.Services.AddHttpForwarder();
+builder.Services.AddMemoryCache();
+
+var logoutTicketLifetime = configuration.GetValue<TimeSpan?>(LogoutTicketLifetimeKey)
+                           ?? throw new InvalidOperationException($"The value {LogoutTicketLifetimeKey} must be set");
+builder.Services.AddSingleton(services => new LogoutTickets(
+    services.GetRequiredService<IMemoryCache>(), logoutTicketLifetime));
 
 var app = builder.Build();
 

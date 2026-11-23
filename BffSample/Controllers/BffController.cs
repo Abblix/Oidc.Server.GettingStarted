@@ -37,8 +37,8 @@ public class BffController : Controller
     }
 
     // A POST with the CSRF header like every other call, so a page elsewhere, a sibling on the same site included,
-    // cannot end the session. It answers with the provider's end-session address (see Program.cs), which the SPA
-    // then navigates to for the RP-initiated logout.
+    // cannot end the session. It answers with the address of LogoutContinue and a ticket (see Program.cs), which the
+    // SPA then navigates to for the RP-initiated logout.
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
@@ -47,4 +47,12 @@ public class BffController : Controller
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return SignOut(new AuthenticationProperties { RedirectUri = "/" }, OpenIdConnectDefaults.AuthenticationScheme);
     }
+
+    // The browser navigates here with the ticket the logout POST answered, and is sent on to the provider's
+    // end-session endpoint. The session is already gone and the ticket works once, so a page elsewhere sending the
+    // browser here can only end a logout the user started, and only with a ticket it cannot read.
+    [HttpGet("logout/continue")]
+    [BrowserNavigation]
+    public IActionResult LogoutContinue([FromQuery] string ticket, [FromServices] LogoutTickets tickets)
+        => tickets.Redeem(ticket) is { } endSessionUrl ? Redirect(endSessionUrl) : BadRequest();
 }

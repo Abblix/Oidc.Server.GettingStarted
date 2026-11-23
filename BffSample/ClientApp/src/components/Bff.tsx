@@ -73,8 +73,9 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
     }, [fetchBff, login]);
 
     // Full RP-initiated logout. The POST carries the CSRF header, so no other page can end the session; the BFF
-    // clears its cookie and answers with the provider's end-session address, which the browser then navigates to
-    // and returns from. A fetch cannot follow that redirect itself.
+    // clears its cookie and answers with an address of its own, which sends the browser on to the provider's
+    // end-session endpoint and back. A fetch cannot follow that redirect itself, and the provider's address never
+    // reaches this script, because it carries the ID token.
     const logout = useCallback(async (): Promise<void> => {
         try {
             const response = await fetchBff('logout', { method: 'POST' });
@@ -83,8 +84,8 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
                 return;
             }
 
-            const { endSessionUrl } = await response.json() as { endSessionUrl: string };
-            window.location.assign(endSessionUrl);
+            const { next } = await response.json() as { next: string };
+            window.location.assign(next);
         } catch (cause) {
             console.error('Logout failed:', cause);
             setSessionError('the logout did not reach the BFF');
