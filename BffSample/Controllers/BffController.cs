@@ -49,8 +49,9 @@ public class BffController : Controller
     }
 
     // The browser navigates here with the ticket the logout POST answered, and is sent on to the provider's
-    // end-session endpoint. The session is already gone and the ticket works once, so a page elsewhere sending the
-    // browser here can only end a logout the user started, and only with a ticket it cannot read.
+    // end-session endpoint. The BFF session is already gone and the ticket works once. A page elsewhere cannot read
+    // the user's ticket; sending the user here with a ticket from its own logout only brings the user to the
+    // provider's logout confirmation, since that ID token names somebody else's session.
     [HttpGet("logout/continue")]
     [BrowserNavigation]
     public IActionResult LogoutContinue([FromQuery] string ticket, [FromServices] LogoutTickets tickets)

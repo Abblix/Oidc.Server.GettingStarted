@@ -5,8 +5,8 @@ namespace BffSample;
 /// <see cref="CsrfHeader"/> and the check for it lets the endpoint through.
 /// </summary>
 /// <remarks>
-/// Only an endpoint that changes nothing on the user's behalf may carry it: a page on another site can send the
-/// browser to it at will.
+/// A page on another site can send the browser to such an endpoint at will, so it may carry the attribute only when
+/// it changes nothing on the user's behalf, or acts only on an unguessable value that the SPA alone received.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class BrowserNavigationAttribute : Attribute;

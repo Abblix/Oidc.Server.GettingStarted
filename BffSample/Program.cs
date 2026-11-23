@@ -72,6 +72,8 @@ builder.Services.AddMemoryCache();
 
 var logoutTicketLifetime = configuration.GetValue<TimeSpan?>(LogoutTicketLifetimeKey)
                            ?? throw new InvalidOperationException($"The value {LogoutTicketLifetimeKey} must be set");
+if (logoutTicketLifetime <= TimeSpan.Zero)
+    throw new InvalidOperationException($"The value {LogoutTicketLifetimeKey} must be a positive time span");
 builder.Services.AddSingleton(services => new LogoutTickets(
     services.GetRequiredService<IMemoryCache>(), logoutTicketLifetime));
 

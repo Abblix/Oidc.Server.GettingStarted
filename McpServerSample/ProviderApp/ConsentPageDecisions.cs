@@ -19,7 +19,7 @@ namespace ProviderApp;
 /// client restricted to exact absolute HTTPS redirect URIs, and an MCP client redirects to a loopback http
 /// address. So a decision answers the one request it was given for and is gone once read: the next authorization,
 /// from the same client or any other, goes to the consent page again. A decision whose request never comes back
-/// expires with the stored request it answers.
+/// expires at most one stored-request lifetime after the user answered.
 /// </remarks>
 /// <param name="cache">Where decisions wait for their requests to resume.</param>
 /// <param name="options">The server's options, for how long a stored authorization request lives.</param>
@@ -56,6 +56,11 @@ public sealed class ConsentPageDecisions(IMemoryCache cache, IOptions<OidcOption
 
         cache.Remove(Key(tenant, authSession, requestUri));
 
+        // Two resumes of the same request may both find the decision before either removes it; only the first to
+        // claim it is answered with it, the other goes to the consent page again
+        if (Interlocked.Exchange(ref decision.Claimed, 1) != 0)
+            return Task.FromResult(new UserConsents { Pending = asked });
+
         // A consent that grants nothing and leaves nothing pending is the user's refusal: the client gets
         // access_denied
         return Task.FromResult(decision.Granted
@@ -68,5 +73,10 @@ public sealed class ConsentPageDecisions(IMemoryCache cache, IOptions<OidcOption
 
     private sealed record DecisionKey(string TenantId, string SessionId, string RequestUri);
 
-    private sealed record Decision(bool Granted, DateTimeOffset GivenAt);
+    private sealed class Decision(bool granted, DateTimeOffset givenAt)
+    {
+        public bool Granted { get; } = granted;
+        public DateTimeOffset GivenAt { get; } = givenAt;
+        public int Claimed;
+    }
 }
