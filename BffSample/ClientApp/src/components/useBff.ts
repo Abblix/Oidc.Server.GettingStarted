@@ -9,7 +9,7 @@ export interface BffContextProps {
     fetchBff: (endpoint: string, options?: RequestInit) => Promise<Response>;
     checkSession: () => Promise<void>;
     login: () => void;
-    logout: () => void;
+    logout: () => Promise<void>;
 }
 
 // Creating a context for BFF to share state and functions across the application. It lives apart from
@@ -20,7 +20,7 @@ export const BffContext = createContext<BffContextProps>({
     fetchBff: async () => new Response(),
     checkSession: async () => {},
     login: () => {},
-    logout: () => {}
+    logout: async () => {}
 });
 
 // Custom hook to use the BFF context easily in other components

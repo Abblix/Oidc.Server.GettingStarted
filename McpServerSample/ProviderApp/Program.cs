@@ -1,14 +1,17 @@
 using System.Net;
 using Abblix.DependencyInjection;
 using Abblix.Jwt;
+using Abblix.Oidc.Server.AspNetCore;
 using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
 using Abblix.Oidc.Server.Endpoints.DynamicClientManagement.Validation;
 using Abblix.Oidc.Server.Features;
+using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.RandomGenerators;
+using Abblix.Oidc.Server.Features.Storages;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.MinimalApi;
@@ -38,11 +41,11 @@ var userStore = new TestUserStore(
 builder.Services.AddSingleton(userStore);
 builder.Services.AddSingleton<IUserInfoProvider>(userStore);
 
-// Grants every client everything it asks for once the user has signed in. With open registration below, any
-// application can become a client, so a real deployment registers its own IUserConsentsProvider and shows the
-// user which client is asking (the MCP specification asks the authorization server to display the redirect
-// URI's host during authorization).
-builder.Services.AddConsentGrantedForEveryClient();
+// With open registration below any application can become a client, so the user approves each authorization on
+// the consent page, which names the client and the host its redirect URI points to (the MCP specification asks
+// the authorization server to display it). ConsentPageDecisions says why no approval is remembered.
+builder.Services.AddSingleton<ConsentPageDecisions>();
+builder.Services.AddSingleton<IUserConsentsProvider>(services => services.GetRequiredService<ConsentPageDecisions>());
 
 builder.Services.AddOidcServices(options =>
 {
@@ -60,6 +63,9 @@ builder.Services.AddOidcServices(options =>
         Clients = [],
 
         LoginUri = new Uri("/Auth/Login", UriKind.Relative),
+
+        // Where the provider sends the user while ConsentPageDecisions holds the request's consent pending
+        ConsentUri = new Uri("/Auth/Consent", UriKind.Relative),
 
         // MCP clients register with the scope the MCP server's challenge names, and the registration endpoint
         // knows only the tenant's own scopes, not those of its resources: declared on the resource alone,
@@ -91,11 +97,23 @@ builder.Services.AddAuthentication().AddCookie();
 
 builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery();
+// ConsentPageDecisions keeps each decision here until its request resumes
 builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
+
+// Every page this provider renders - the login form, a consent or error page - acts for the user on a click, and a
+// page on another site could load it in a nearly invisible frame over a decoy button. RFC 9700 section 4.16:
+// "Authorization servers MUST prevent clickjacking attacks", with X-Frame-Options and, in addition, a Content
+// Security Policy. Nothing this provider serves is meant to be framed, so every response forbids it.
+app.Use((context, next) =>
+{
+    context.Response.Headers.ContentSecurityPolicy = AntiFramingHeaders.ContentSecurityPolicy;
+    context.Response.Headers.XFrameOptions = AntiFramingHeaders.XFrameOptions;
+    return next(context);
+});
 
 app.UseRouting();
 app.UseCors();
@@ -157,7 +175,124 @@ app.MapPost("/Auth/Login", async (
     // rather than the bare 400 the automatic check answers
     .DisableAntiforgery();
 
+app.MapGet("/Auth/Consent", async (
+    string? request_uri,
+    IAntiforgery antiforgery,
+    HttpContext context,
+    IAuthSessionService authService,
+    ITenantAccessor tenantAccessor,
+    IAuthorizationRequestStorage requestStorage,
+    IClientInfoProvider clientInfoProvider) =>
+{
+    if (!Uri.TryCreate(request_uri, UriKind.Absolute, out var requestUri) ||
+        await authService.AuthenticateAsync() == null)
+    {
+        return Results.BadRequest();
+    }
+
+    var tenant = tenantAccessor.CurrentTenant();
+    var request = await requestStorage.TryGetAsync(tenant, requestUri);
+    if (request == null)
+        return Results.Content(ExpiredPage(), "text/html");
+
+    var client = await clientInfoProvider.TryFindClientAsync(tenant, request.ClientId!);
+    return Results.Content(
+        ConsentPage(antiforgery.GetAndStoreTokens(context), requestUri, request, client?.ClientName),
+        "text/html");
+});
+
+app.MapPost("/Auth/Consent", async (
+        [FromForm] string requestUri,
+        [FromForm] string decision,
+        IAntiforgery antiforgery,
+        HttpContext context,
+        IAuthSessionService authService,
+        ITenantAccessor tenantAccessor,
+        IAuthorizationRequestStorage requestStorage,
+        IOidcEndpointResolver endpointResolver,
+        ConsentPageDecisions decisions) =>
+    {
+        // A page on another site could submit this form for the user and approve a client the user never saw.
+        // The antiforgery token is what such a page cannot supply.
+        if (!await antiforgery.IsRequestValidAsync(context) ||
+            !Uri.TryCreate(requestUri, UriKind.Absolute, out var storedUri) ||
+            await authService.AuthenticateAsync() is not { } authSession)
+        {
+            return Results.BadRequest();
+        }
+
+        // Only a request the provider sent the user here with can be answered
+        var tenant = tenantAccessor.CurrentTenant();
+        if (await requestStorage.TryGetAsync(tenant, storedUri) == null)
+            return Results.Content(ExpiredPage(), "text/html");
+
+        // The value comes from the browser, so anything but the two buttons' values is a bad request, not a fault
+        bool? granted = decision switch
+        {
+            "allow" => true,
+            "deny" => false,
+            _ => null,
+        };
+        if (granted == null)
+            return Results.BadRequest();
+
+        decisions.Record(tenant, authSession, storedUri, granted.Value);
+
+        // Back to the authorization endpoint, which resumes the request: a code for the client when the user
+        // allowed it, access_denied when not
+        var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
+            { Query = { [AuthorizationRequest.Parameters.RequestUri] = storedUri.OriginalString } };
+        return Results.Redirect(authorizeUrl);
+    })
+    // The handler checks the antiforgery token itself, as the login form does
+    .DisableAntiforgery();
+
 app.Run();
+
+static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, AuthorizationRequest request, string? clientName)
+{
+    // Every value below was chosen by whoever registered the client, so each is encoded before it reaches the page
+    var client = WebUtility.HtmlEncode(clientName ?? request.ClientId ?? "");
+    var clientId = WebUtility.HtmlEncode(request.ClientId ?? "");
+    var redirectUri = WebUtility.HtmlEncode(request.RedirectUri?.OriginalString ?? "");
+    var redirectHost = WebUtility.HtmlEncode(request.RedirectUri?.Host ?? "");
+    var scopes = string.Join("", request.Scope.Select(scope => $"<li>{WebUtility.HtmlEncode(scope)}</li>"));
+    var resources = string.Join("", (request.Resources ?? [])
+        .Select(resource => $"<li>{WebUtility.HtmlEncode(resource.OriginalString)}</li>"));
+    return $"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>McpServerSample provider</title></head>
+        <body>
+            <h1>Allow {client}?</h1>
+            <p>The application <b>{client}</b> (client ID <code>{clientId}</code>) asks to act for you. It registered
+            itself with this provider, so the name is its own claim.</p>
+            <p>If you allow it, the provider sends the authorization code to <b>{redirectHost}</b>: <code>{redirectUri}</code></p>
+            <p>Scopes:</p>
+            <ul>{scopes}</ul>
+            <p>Resources:</p>
+            <ul>{resources}</ul>
+            <form method="post" action="/Auth/Consent">
+                <input type="hidden" name="{WebUtility.HtmlEncode(tokens.FormFieldName)}" value="{WebUtility.HtmlEncode(tokens.RequestToken)}" />
+                <input type="hidden" name="requestUri" value="{WebUtility.HtmlEncode(requestUri.OriginalString)}" />
+                <button type="submit" name="decision" value="allow">Allow</button>
+                <button type="submit" name="decision" value="deny">Deny</button>
+            </form>
+        </body>
+        </html>
+        """;
+}
+
+static string ExpiredPage() => """
+    <!DOCTYPE html>
+    <html>
+    <head><title>McpServerSample provider</title></head>
+    <body>
+        <h1>The request has expired</h1>
+        <p>Start again from the MCP client.</p>
+    </body>
+    </html>
+    """;
 
 static string LoginPage(AntiforgeryTokenSet tokens, string? requestUri, string? error)
 {
