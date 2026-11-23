@@ -15,7 +15,7 @@ export const LogoutButton: React.FC = () => {
 };
 
 const App: React.FC = () => (
-    <BffProvider baseUrl="https://localhost:5003/bff">
+    <BffProvider baseUrl="/bff">
         <div className="app">
             <header className="app-header">
                 <div>

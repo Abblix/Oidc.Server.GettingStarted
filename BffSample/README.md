@@ -11,9 +11,18 @@ A browser is a hostile place to keep a token. Anything that can run script on th
 The SPA never calls the provider or the API directly. It calls its own origin, under `/bff`:
 
 - `GET /bff/check_session`: returns the current user's claims, or `401` when there is no session. The SPA calls this on load to decide whether to render or to redirect to login.
-- `GET /bff/login`: starts the authorization-code flow (`Challenge`), then returns to the SPA.
-- `GET /bff/logout`: signs out of the BFF, clearing the session cookie, and of the provider: the browser is sent to the provider's end-session endpoint and back to the SPA. The SPA navigates here rather than fetching it, because only a navigation can follow those redirects.
-- `GET /bff/{**catch-all}`: reverse-proxies to the protected API (`/bff/weatherforecast` reaches the weather API), attaching the access token as a `Bearer` header. The token is read from the session, so the browser never sees it.
+- `GET /bff/login`: starts the authorization-code flow (`Challenge`), then returns to the SPA. The SPA navigates here, because the flow is a top-level redirect to the provider.
+- `POST /bff/logout`: signs out of the BFF, clearing the session cookie, and answers with `{"next": "/bff/logout/continue?ticket=..."}`. A fetch cannot follow the redirect to the provider itself, so the SPA navigates to that address next. The provider's end-session address stays on the BFF, because it carries the ID token as `id_token_hint`.
+- `GET /bff/logout/continue?ticket=...`: redirects the browser to the provider's end-session endpoint, which ends the provider's session and comes back to the SPA. The ticket works once and expires after `LogoutTicketLifetime`; an unknown or used ticket answers `400`.
+- `GET /bff/weatherforecast`: forwarded to the weather API's `/weatherforecast` with the access token attached as a `Bearer` header. The token is read from the session, so the browser never sees it.
+
+Nothing else under `/bff` is forwarded. Every address the SPA may reach through the BFF is named in `Program.cs` together with its method, and any other path answers `404`. A path forwarded as it came in would carry the user's access token to whatever else the API serves, its Swagger UI included. RFC 10017 section 6.1.3.6 requires the BFF to forward only to destinations it allows.
+
+Every request under `/bff` except the two navigations, login and the logout continuation, carries the header `X-CSRF: 1`, and the BFF refuses a request without it with `400`. This is the CSRF defence of RFC 10017 section 6.1.3.3.2. A page on another origin cannot add a custom header without the BFF approving it in a CORS preflight, and this BFF has no CORS policy, so it approves none. The `SameSite=Strict` session cookie does not stop such a page on its own when it runs on the same site as the BFF: here every sample shares the site `localhost`, and in production that could be another subdomain.
+
+The SPA reaches `/bff` on its own origin. In development the Vite dev server forwards `/bff` to the BFF, and once published the BFF serves the SPA itself. The browser therefore never sends a cross-origin request to the BFF.
+
+The session cookie is named `__Host-Http-Bff`. It is `Secure`, `HttpOnly` and `SameSite=Strict`, with `Path=/` and no `Domain`, as RFC 10017 section 6.1.3.2 asks. The published SPA is served with a Content Security Policy that lets script, style and connections come only from its own origin.
 
 The forwarding is done with [YARP](https://microsoft.github.io/reverse-proxy/); the SPA dev server is launched and proxied in development by `Microsoft.AspNetCore.SpaProxy`.
 
@@ -25,15 +34,16 @@ The sample is one client in a small constellation. Start these projects (each in
 - `dotnet run --project ApiSample` : the protected weather API on `https://localhost:5004`.
 - `dotnet run --project BffSample` : the BFF backend on `https://localhost:5003`. It launches the Vite dev server automatically.
 
-Then open `https://localhost:5003`. You are redirected to the provider to sign in (with OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, create an account first with Create one on its sign-in screen), and land back on the SPA showing your claims and the weather forecast pulled through the BFF.
+Then open `https://localhost:5003`. You are redirected to the provider to sign in (with OpenIDProviderApp the demo user is `john.doe@example.com` / `Jd!2024$3cur3`; with AspNetIdentitySample, create an account first with Create one on its sign-in screen), and land back on the SPA showing your claims and the weather forecast pulled through the BFF. In development the SPA is served by the Vite dev server, so the address you land on is `https://localhost:3000`.
 
 Node.js is required to build and run the SPA; the backend restores npm packages on first build.
 
 ## Layout
 
-- `Program.cs`: cookie + OpenID Connect authentication, and the YARP forwarder that attaches the access token.
+- `Program.cs`: cookie + OpenID Connect authentication, the CSRF header check, the Content Security Policy, and the YARP forwarder that attaches the access token.
+- `CsrfHeader.cs`: the header the SPA sends and the BFF checks for.
 - `Controllers/BffController.cs`: the `check_session`, `login`, and `logout` endpoints.
-- `ClientApp/`: the React + TypeScript SPA built with Vite. `src/components/Bff.tsx` holds the session-aware fetch wrapper the rest of the UI uses.
+- `ClientApp/`: the React + TypeScript SPA built with Vite. `src/components/Bff.tsx` holds the session-aware fetch wrapper the rest of the UI uses, which adds the CSRF header. `vite.config.ts` forwards `/bff` to the BFF in development.
 
 ## The guides behind this sample
 

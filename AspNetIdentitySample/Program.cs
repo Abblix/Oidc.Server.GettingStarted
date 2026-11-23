@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Abblix.Jwt;
 using Abblix.Oidc;
+using Abblix.Oidc.Server.AspNetCore;
 using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
@@ -253,6 +254,17 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
+// Every page this provider renders - the login form, a consent or error page - acts for the user on a click, and a
+// page on another site could load it in a nearly invisible frame over a decoy button. RFC 9700 section 4.16:
+// "Authorization servers MUST prevent clickjacking attacks", with X-Frame-Options and, in addition, a Content
+// Security Policy. Nothing this provider serves is meant to be framed, so every response forbids it.
+app.Use((context, next) =>
+{
+    context.Response.Headers.ContentSecurityPolicy = AntiFramingHeaders.ContentSecurityPolicy;
+    context.Response.Headers.XFrameOptions = AntiFramingHeaders.XFrameOptions;
+    return next(context);
+});
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();

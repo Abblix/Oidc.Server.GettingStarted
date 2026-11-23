@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState, ReactNode, FC } from 'react';
 import { BffContext, type UserClaims } from './useBff';
 
+// The static header every request to the BFF carries; BffSample/Program.cs checks for the same name and value
+const CsrfHeaderName = 'X-CSRF';
+const CsrfHeaderValue = '1';
+
 interface BffProviderProps {
     baseUrl: string;
     children: ReactNode;
@@ -16,11 +20,12 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
     const fetchBff = useCallback(
         async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
             try {
-                // The fetch function includes credentials to handle cookies, which are necessary for authentication
-                return await fetch(`${normalizedBaseUrl}/${endpoint}`, {
-                    credentials: 'include',
-                    ...options
-                });
+                // The BFF refuses a request without this header (RFC 10017 section 6.1.3.3.2). A page on another
+                // origin, a sibling on the same site included, cannot add a custom header to a request without the
+                // BFF approving it in a CORS preflight, and the BFF approves none.
+                const headers = new Headers(options.headers);
+                headers.set(CsrfHeaderName, CsrfHeaderValue);
+                return await fetch(`${normalizedBaseUrl}/${endpoint}`, { ...options, headers });
             } catch (error) {
                 console.error(`Error during ${endpoint} call:`, error);
                 throw error;
@@ -67,11 +72,25 @@ export const BffProvider: FC<BffProviderProps> = ({ baseUrl, children }) => {
         }
     }, [fetchBff, login]);
 
-    // Full RP-initiated logout: navigate the browser to /bff/logout so it can follow the
-    // redirect to the provider's end-session endpoint and back. A fetch cannot navigate the page.
-    const logout = useCallback((): void => {
-        window.location.href = `${normalizedBaseUrl}/logout`;
-    }, [normalizedBaseUrl]);
+    // Full RP-initiated logout. The POST carries the CSRF header, so no other page can end the session; the BFF
+    // clears its cookie and answers with an address of its own, which sends the browser on to the provider's
+    // end-session endpoint and back. A fetch cannot follow that redirect itself, and the provider's address never
+    // reaches this script, because it carries the ID token.
+    const logout = useCallback(async (): Promise<void> => {
+        try {
+            const response = await fetchBff('logout', { method: 'POST' });
+            if (!response.ok) {
+                setSessionError(`the BFF answered ${response.status} to the logout`);
+                return;
+            }
+
+            const { next } = await response.json() as { next: string };
+            window.location.assign(next);
+        } catch (cause) {
+            console.error('Logout failed:', cause);
+            setSessionError('the logout did not reach the BFF');
+        }
+    }, [fetchBff]);
 
     // Run the session check once on mount. checkSession sets state only after an awaited
     // fetch, so this is not the synchronous render cascade the set-state-in-effect rule guards.
