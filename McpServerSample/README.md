@@ -75,7 +75,7 @@ When the provider refuses, it answers the authorization request with `400` and n
 
 ### A document served on your own machine
 
-The document in this sample lives on `localhost`, and draft section 10.7 forbids exactly that in production: servers "MUST NOT fetch a Client ID Metadata Document URL or any URLs contained within a Client ID Metadata Document that resolve to special-use IP addresses". The same section allows one exception: servers "deployed for development or testing purposes MAY relax this restriction to allow fetching from loopback addresses when the authorization server itself is also running on a loopback address". `ProviderApp` turns that exception on in the Development environment only, and the library honours it only while the issuer is itself on loopback. A vendor's document on its public site needs no exception at all.
+The document in this sample lives on `localhost`, and draft section 10.7 forbids exactly that in production: servers "MUST NOT fetch a Client ID Metadata Document URL or any URLs contained within a Client ID Metadata Document that resolve to special-use IP addresses". The same section allows one exception: servers "deployed for development or testing purposes MAY relax this restriction to allow fetching from loopback addresses when the authorization server itself is also running on a loopback address". `ProviderApp` turns that exception on in the Development environment only, by setting `ClientIdMetadataDocuments.DocumentAddresses` to `ClientIdMetadataDocumentAddresses.AllowLoopback` under `builder.Environment.IsDevelopment()`. The library applies it only while the tenant's issuer is itself on loopback, keeps every URL inside the document to public addresses, and refuses to start a host in the Production environment with it set. Run with any other environment, or with an issuer that is not on loopback, the provider refuses the sample's document like any other loopback address. A vendor's document on its public site needs no exception at all.
 
 ## The assistant registering itself
 
@@ -179,7 +179,7 @@ The first returns `401` with the challenge, the second the resource metadata, an
 - The tasks live in memory too, and every employee's list starts from the same seed tasks (`Tracker:SeedTasks`).
 - Signing keys are generated at startup, so a restarted provider invalidates every token issued before. The tracker refuses tokens signed with the new key until it fetches the provider's keys again: `JwtBearer` does that by itself on meeting an unknown key, at most once per its refresh interval. Restarting the tracker along with the provider recovers at once.
 - Open registration admits machine clients unless the host narrows the grant types, as `NewClientOptions.AllowedGrantTypes` does here. A provider that drops it hands tracker tokens to any program that asks.
-- The loopback exception for metadata documents is for a provider on a developer's machine. A provider with a public issuer fetches documents only from public addresses.
+- `AllowLoopback` is for a provider on a developer's machine. A provider with a public issuer fetches documents only from public addresses, whatever the setting says.
 
 ## Layout
 
