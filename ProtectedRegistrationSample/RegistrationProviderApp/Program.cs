@@ -5,6 +5,7 @@ using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Endpoints.DynamicClientManagement.Interfaces;
 using Abblix.Oidc.Server.Features;
+using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.Storages;
@@ -30,6 +31,14 @@ if (!TimeSpan.TryParse(maxTokenLifetimeValue, CultureInfo.InvariantCulture, out 
 {
     throw new InvalidOperationException(
         $"{maxTokenLifetimeSetting} is '{maxTokenLifetimeValue}', while it must be a positive duration such as 1.00:00:00");
+}
+
+const string clientSecretEncryptionKeySetting = "Provider:ClientSecretEncryptionKey";
+var clientSecretEncryptionKey = configuration[clientSecretEncryptionKeySetting];
+if (string.IsNullOrWhiteSpace(clientSecretEncryptionKey))
+{
+    throw new InvalidOperationException(
+        $"{clientSecretEncryptionKeySetting} is not configured: set it to 32 random bytes, base64");
 }
 
 builder.Services.AddSingleton(OperatorKey.FromConfiguration(configuration, "Operator:KeyHash"));
@@ -60,6 +69,10 @@ builder.Services.AddOidcServices(options =>
         Clients = [],
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
+
+        // The key each issued client_secret is also kept encrypted with, so a client reading its registration
+        // (RFC 7592 section 3) gets its secret back. A tenant serving registration does not start without one.
+        ClientSecretEncryption = new ClientSecretEncryptionSettings { Key = clientSecretEncryptionKey },
     });
 });
 

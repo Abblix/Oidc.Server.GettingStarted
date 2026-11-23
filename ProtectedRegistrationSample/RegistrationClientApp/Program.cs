@@ -41,12 +41,12 @@ var tokenEndpoint = (string?)metadata["token_endpoint"]
 
 // A service acting for itself: client_credentials, and no response type, since it never visits the authorization
 // endpoint (RFC 7591 section 2.1)
-JsonObject Registration(string name) => new()
+JsonObject Registration(string name, string authMethod = "client_secret_basic") => new()
 {
     ["client_name"] = name,
     ["grant_types"] = new JsonArray("client_credentials"),
     ["response_types"] = new JsonArray(),
-    ["token_endpoint_auth_method"] = "client_secret_basic",
+    ["token_endpoint_auth_method"] = authMethod,
 };
 
 await exchange.SendAsync(
@@ -67,6 +67,13 @@ var clientSecret = Member(registered, "client_secret");
 var clientUri = Member(registered, "registration_client_uri");
 var registrationAccessToken = Member(registered, "registration_access_token");
 
+// client_credentials lets a client act for itself, so the provider issues it only to a client that proves who it
+// is: a public client, one with no credential at the token endpoint, is refused at registration
+await exchange.SendAsync(
+    "Register a client that sends no credential (token_endpoint_auth_method none): refused",
+    Post(registrationEndpoint, Registration(clientName, "none"), initialAccessToken),
+    HttpStatusCode.BadRequest);
+
 await exchange.SendAsync(
     "Get a token as the registered client",
     TokenRequest(clientId, clientSecret),
@@ -79,8 +86,12 @@ var current = await exchange.SendAsync(
 if (current == null)
     return Stopped("the registration could not be read");
 
-// RFC 7592 section 2.2: the update carries every field the read returned, client_id included, except the four the
-// provider owns; a field left out would be deleted from the registration
+// RFC 7592 Appendix A.1: the provider may issue a new client_secret in any read or update response, so the client
+// keeps the one each response carries
+clientSecret = Member(current, "client_secret");
+
+// RFC 7592 section 2.2: the update carries every field the read returned, client_id and client_secret included,
+// except the four the provider owns; a field left out would be deleted from the registration
 var update = (JsonObject)current.DeepClone();
 foreach (var providerOwned in new[]
          {
@@ -89,6 +100,15 @@ foreach (var providerOwned in new[]
 {
     update.Remove(providerOwned);
 }
+
+// RFC 7592 section 2.2: a client_secret in the update must be the one currently issued, and a client never chooses
+// its own
+var chosenSecret = (JsonObject)update.DeepClone();
+chosenSecret["client_secret"] = "a-secret-the-client-chose";
+await exchange.SendAsync(
+    "Update the registration with a client_secret of the client's own choosing: refused",
+    Put(clientUri, chosenSecret, registrationAccessToken),
+    HttpStatusCode.BadRequest);
 
 update["client_name"] = updatedClientName;
 
@@ -103,6 +123,7 @@ if (updated == null)
 // discard the previous one (section 2.2), and this provider refuses it from now on
 var previousRegistrationAccessToken = registrationAccessToken;
 registrationAccessToken = Member(updated, "registration_access_token");
+clientSecret = Member(updated, "client_secret");
 
 await exchange.SendAsync(
     "Read with the registration access token the update replaced: refused",

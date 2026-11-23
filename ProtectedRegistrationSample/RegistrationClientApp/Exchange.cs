@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -20,7 +21,13 @@ public sealed class Exchange(HttpClient http)
 
     private const int ShownCredentialLength = 6;
 
-    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+    // Relaxed escaping prints an apostrophe in an error_description as itself rather than as '. The output goes
+    // to a console, never into an HTML page, so nothing here needs the default escaping.
+    private static readonly JsonSerializerOptions Indented = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     private int _step;
 
