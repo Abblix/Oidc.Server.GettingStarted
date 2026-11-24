@@ -117,7 +117,7 @@ On the provider side (`ProviderApp/Program.cs`):
 - Every page the provider renders, the sign-in form and the consent page included, forbids being framed (`Content-Security-Policy` and `X-Frame-Options`), so a page on another site cannot load it under a decoy button (RFC 9700 section 4.16).
 - `AddDynamicClientRegistration()` serves the registration endpoint and advertises it in the metadata.
 - No pre-registered clients at all: every client arrives one of the two ways.
-- `NewClientOptions` limits both kinds of client the same way. `AllowedGrantTypes` admits only the grant types acting for a user. `OfflineAccess` set to `Allowed` states that the user's consent is enough for a refresh token, so a client asking for `offline_access` without `prompt=consent` still gets one (OpenID Connect Core 1.0 section 11 has that scope ignored otherwise).
+- `NewClientOptions` limits both kinds of client the same way. `AllowedGrantTypes` admits only the grant types acting for a user. `AllowedResources` lets such a client get a token for the tracker and nothing else the provider protects. `OfflineAccess` set to `Allowed` states that the user's consent is enough for a refresh token, so a client asking for `offline_access` without `prompt=consent` still gets one (OpenID Connect Core 1.0 section 11 has that scope ignored otherwise).
 
 On the tracker side (`McpServerApp/Program.cs`), using the official C# MCP SDK (`ModelContextProtocol.AspNetCore`):
 

@@ -102,6 +102,10 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         // provider states for every client that registers that the user's consent, which the consent provider above
         // reports, is enough, so the client gets its refresh token.
         OfflineAccess = OfflineAccess.Allowed,
+
+        // A client that registers itself may get a token for the task tracker and nothing else this provider
+        // protects, whatever it names: which resources a client reaches is the provider's policy, not the client's
+        AllowedResources = [mcpResource],
     };
     // #endregion
 
