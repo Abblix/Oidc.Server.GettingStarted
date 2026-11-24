@@ -49,8 +49,9 @@ var keySource = ((IConfigurationRoot)configuration).Providers.Last(provider => p
 if (!builder.Environment.IsDevelopment() && keySource is JsonConfigurationProvider { Source.Path: "appsettings.json" })
 {
     throw new InvalidOperationException(
-        $"{clientSecretEncryptionKeySetting} is the key published in appsettings.json, which serves development " +
-        "only. Set your own, 32 random bytes in base64, through an environment variable or a secret store.");
+        $"{clientSecretEncryptionKeySetting} comes from appsettings.json, which holds the key published with the " +
+        "sample and serves development only. Set your own, 32 random bytes in base64, through an environment " +
+        "variable or a secret store.");
 }
 
 builder.Services.AddSingleton(OperatorKey.FromConfiguration(configuration, "Operator:KeyHash"));

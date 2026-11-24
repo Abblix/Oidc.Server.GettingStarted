@@ -52,8 +52,9 @@ var keySource = ((IConfigurationRoot)configuration).Providers.Last(provider => p
 if (!builder.Environment.IsDevelopment() && keySource is JsonConfigurationProvider { Source.Path: "appsettings.json" })
 {
     throw new InvalidOperationException(
-        $"{clientSecretEncryptionKeySetting} is the key published in appsettings.json, which serves development " +
-        "only. Set your own, 32 random bytes in base64, through an environment variable or a secret store.");
+        $"{clientSecretEncryptionKeySetting} comes from appsettings.json, which holds the key published with the " +
+        "sample and serves development only. Set your own, 32 random bytes in base64, through an environment " +
+        "variable or a secret store.");
 }
 
 // Open registration lets anyone create clients, so each address may register only so many in a window
@@ -178,7 +179,9 @@ builder.Services.AddRateLimiter(options =>
         var registration = context.RequestServices.GetRequiredService<IOidcEndpointResolver>()
             .Resolve(OidcEndpoints.RegisterClient)!;
 
-        return HttpMethods.IsPost(context.Request.Method) && context.Request.Path == registration.AbsolutePath
+        // The published address includes the path base the host may be mounted under, so the request's does too
+        var path = context.Request.PathBase.Add(context.Request.Path);
+        return HttpMethods.IsPost(context.Request.Method) && path == registration.AbsolutePath
             ? RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = registrationPermits, Window = registrationWindow })
