@@ -7,10 +7,10 @@ A company runs a task tracker and wants its employees to use it from the AI assi
 Three parties take part, and each sees something different.
 
 - The company runs the tracker (`McpServerApp`) and its sign-in service (`ProviderApp`). It never signed a contract with the assistant's vendor and holds no account for the assistant. What it decides is which vendors it trusts, by listing the web address under which a vendor publishes its assistants.
-- The employee, John Doe, opens the assistant and asks it about his tasks. The assistant sends him to the company's sign-in page. He signs in with his company account, and a consent page names the assistant, the web site its description is published on, and where the employee goes back to. He allows it and comes back to the assistant, which can now list his tasks, add one and close one. He never types his password into the assistant.
+- The employee, John Doe, opens the assistant and asks it about his tasks. The assistant sends him to the company's sign-in page. He signs in with his company account, and a consent page names the assistant, the web site its description is published on, and where the employee goes back to. He allows it and comes back to the assistant, which can now list his tasks. When he asks it to add a task, the assistant sends him to the provider once more, this time asking to change his tasks as well; he allows that too, and it adds the task and closes it. He never types his password into the assistant.
 - The vendor, Example Assistant, publishes a short description of its assistant on its own web site: its name, its home page, and where the company's sign-in page may send the employee back to. The assistant uses the address of that description as its name at the company (`McpClientApp`).
 
-The employee can also let the assistant read his tasks without changing them. The assistant then sees the list but is refused when it tries to add a task, and the tracker tells it which permission it lacks.
+The employee can also let the assistant read his tasks without changing them, by clearing the permission to change them on the consent page. The assistant then sees the list but is refused when it tries to add a task, and the tracker tells it which permission it lacks.
 
 In this sample the three run on one machine: the tracker on `https://localhost:5008`, the sign-in service on `https://localhost:5007`, and the assistant on `https://localhost:5009`, where it also serves the vendor's description. In production the vendor publishes the description on its own domain, such as `https://assistant.example.com/client-metadata.json`, and the company adds `https://assistant.example.com/` to `AllowedClientIdPrefixes`. That one line is the whole of the company's setup for the vendor: no registration, no shared secret, and every assistant the vendor publishes under that address is accepted.
 
@@ -25,7 +25,7 @@ The MCP specification (revision 2026-07-28) prefers the first. Its client regist
 
 ## Discovery, common to both
 
-- The assistant calls the tracker without a token and gets `401` with `WWW-Authenticate: Bearer resource_metadata="...", scope="tasks.read tasks.write"`.
+- The assistant calls the tracker without a token and gets `401` with `WWW-Authenticate: Bearer resource_metadata="...", scope="tasks.read"`. The protected resource metadata lists `tasks.read` as well: the MCP specification has `scopes_supported` "represent the minimal set of scopes necessary for basic functionality", with more asked for when a call needs them.
 - It reads the protected resource metadata (RFC 9728) at that address. The document names the resource, `https://localhost:5008/mcp`, and the authorization server, `https://localhost:5007`.
 - It reads the provider's metadata at `/.well-known/oauth-authorization-server` (RFC 8414). There it finds `client_id_metadata_document_supported: true`, the `registration_endpoint`, and S256 among the PKCE methods. The SDK refuses a provider without S256.
 
@@ -50,7 +50,7 @@ The vendor's document, `McpClientApp/client-metadata.json`, which the assistant 
 
 What the assistant does:
 
-- It sees `client_id_metadata_document_supported` in the provider's metadata and sends the browser to the authorization endpoint with `client_id=https://localhost:5009/client-metadata.json`, its redirect URI, `resource`, the scopes the tracker named plus `offline_access`, and a PKCE challenge. It does not call the registration endpoint.
+- It sees `client_id_metadata_document_supported` in the provider's metadata and sends the browser to the authorization endpoint with `client_id=https://localhost:5009/client-metadata.json`, its redirect URI, `resource`, the scope the tracker named, `tasks.read`, plus `offline_access`, and a PKCE challenge. It does not call the registration endpoint.
 - After the redirect, it redeems the code at the token endpoint under the same `client_id`, with the PKCE verifier and no secret, and gets an access token and a refresh token.
 
 What the provider fetches and checks, before it shows the employee anything:
@@ -63,9 +63,9 @@ What the provider fetches and checks, before it shows the employee anything:
 - The redirect URI in the request must be one the document lists. Draft section 4.2 asks for "an exact match (using simple string comparison) of a registered redirect URL" and makes one exception: "redirect URIs on the loopback network interface, which allow for randomly assigned ports". So `http://127.0.0.1:5010/callback` admits the same address on any port, as RFC 8252 section 7.3 asks for a native application, and nothing with another host or path.
 - It keeps the document as long as the response's cache headers allow, within the `MinimumCacheDuration` and `MaximumCacheDuration` the host sets, so the next request from the same assistant is not another fetch.
 
-What the employee sees: the provider's sign-in page, then the consent page, then the assistant's page at `http://127.0.0.1:5010/callback`. The consent page names the assistant by the document's `client_name`, says the description is published at `localhost:5009`, the host of the `client_id`, and names the host the code goes to, `127.0.0.1`. The name is the document's own claim and nobody reviewed it (draft section 10.10), so the host beside it is what the employee can check. Allow sends the code; Deny ends the request with `access_denied`. The redirect carries `code`, `state` and `iss`, and the SDK checks `iss`, which draft section 7 makes mandatory in this flow.
+What the employee sees: the provider's sign-in page, then the consent page, then the assistant's page at `http://127.0.0.1:5010/callback`. The consent page names the assistant by the document's `client_name`, says the description is published at `localhost:5009`, the host of the `client_id`, and names the host the code goes to, `127.0.0.1`. Because that host is this computer, the page warns that any program running on it could receive the code, as the MCP specification asks ("SHOULD display additional warnings for `localhost`-only redirect URIs"). Each scope has its own checkbox, so the employee can allow some and clear others; the token carries only the scopes left checked. The name is the document's own claim and nobody reviewed it (draft section 10.10), so the host beside it is what the employee can check. Allow sends the code; Deny ends the request with `access_denied`. The redirect carries `code`, `state` and `iss`, and the SDK checks `iss`, which draft section 7 makes mandatory in this flow.
 
-The assistant then calls `who_am_i`, which answers `subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read tasks.write`. The tracker knows the assistant by its URL, too.
+The assistant then calls `who_am_i`, which answers `subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read`. The tracker knows the assistant by its URL, too.
 
 When the provider refuses, it answers the authorization request with `400` and never redirects to the assistant:
 
@@ -81,7 +81,7 @@ The document in this sample lives on `localhost`, and draft section 10.7 forbids
 
 What the assistant does:
 
-- It posts its metadata to the `registration_endpoint` with no initial access token: its name and redirect URI, read from the same document, `application_type` `native` (the SDK infers it from the loopback redirect URI, as the MCP specification asks of a client) and no secret.
+- It posts its metadata to the `registration_endpoint` with no initial access token: its name and redirect URI, read from the same document, `application_type` `native` (the SDK infers it from the loopback redirect URI, as the MCP specification asks of a client), the scopes it will use, and no secret. The provider holds a registered client to the scopes it registered, so a scope asked for later could not be added by step-up: the assistant registers, and asks, for `tasks.read` and `tasks.write` at once (`RegistrationScopes` in its `appsettings.json`). A client known by its document has no such list and starts with `tasks.read` alone.
 - It gets back a `client_id` the provider made up, and runs the same authorization code flow with PKCE under that identifier.
 
 What the provider checks:
@@ -97,7 +97,7 @@ What the employee sees: the same sign-in page, a consent page that says the clie
 
 The tracker has two scopes, `tasks.read` for `list_my_tasks` and `who_am_i`, and `tasks.write` for `create_task` and `close_task`. Every tool works on the tasks of the employee the access token was issued for, read from its subject, so an assistant acting for one employee never sees another's.
 
-A call to a tool whose scope the token lacks gets the answer the MCP specification gives for it: "HTTP 403 Forbidden" with `WWW-Authenticate: Bearer error="insufficient_scope", scope="tasks.write", resource_metadata="..."`, naming the scope "needed to satisfy the current operation". A client acting for a user "SHOULD attempt the step-up authorization flow", asking the user again with the scope added. The sample's read-only run keeps the assistant to `tasks.read`, so the step-up adds nothing and the refusal stands.
+A call to a tool whose scope the token lacks gets the answer the MCP specification gives for it: "HTTP 403 Forbidden" with `WWW-Authenticate: Bearer error="insufficient_scope", scope="tasks.write", resource_metadata="..."`, naming the scope "needed to satisfy the current operation". A client acting for a user "SHOULD attempt the step-up authorization flow", asking the user again with the scope added. The assistant known by its document does exactly that: its first call that changes a task is answered 403, it sends the employee to the provider asking for `tasks.read tasks.write`, and after the second consent it repeats the call with the new token. The sample's read-only run keeps the assistant to `tasks.read`, so the step-up adds nothing and the refusal stands; so does an employee who clears `tasks.write` on the second consent page.
 
 ## Signing out at the provider
 
@@ -113,6 +113,7 @@ On the provider side (`ProviderApp/Program.cs`):
 - `AddClientIdMetadataDocuments()` resolves a `client_id` that is an https URL by fetching its document, and advertises `client_id_metadata_document_supported`. The feature is experimental in Abblix OIDC Server 3.1 because the draft is not an RFC yet, so the compiler reports `ABX9001` where it is used, and `Program.cs` suppresses it there.
 - The employee approves every authorization on a consent page. Any application can become a client, by registering itself or by naming its metadata document, so the provider cannot tell who is asking, and RFC 10017 section 6.3.3.2 says an authorization server "SHOULD NOT process authorization requests automatically without user consent or interaction, except when the authorization server can assure the identity of the client application". `ConsentPageDecisions` is the sample's `IUserConsentsProvider`: it holds every request's consent pending, so the library sends the user to the tenant's `ConsentUri`, `/Auth/Consent`. Allow resumes the request with the consent given, and Deny ends it with `access_denied`. A decision answers only the request it was made on and is not remembered: the section lets an earlier approval count only for a client limited to exact HTTPS redirect URIs, and an MCP client redirects to a loopback `http` address. With nothing remembered, no approval given to one client and resource is reused for another, which draft section 10.12 asks of any approval a server keeps.
 - `AllowedClientIdPrefixes` is the company's list of trusted vendors. The library does not require it with a consent provider that asks the user, and without it any document is fetched and the consent page is the employee's only check. A provider that grants every client everything it asks for (`AddConsentGrantedForEveryClient`) does not start without the list, because any URL could then get the employee's tokens without the employee being asked.
+- Open registration lets anyone create clients, so each address may register only `Registration:PermitLimit` clients per `Registration:Window`; more are answered `429`. The limit applies to the registration endpoint alone, recognised by the address the library publishes for it, and every other endpoint stays unlimited.
 - Every page the provider renders, the sign-in form and the consent page included, forbids being framed (`Content-Security-Policy` and `X-Frame-Options`), so a page on another site cannot load it under a decoy button (RFC 9700 section 4.16).
 - `AddDynamicClientRegistration()` serves the registration endpoint and advertises it in the metadata.
 - No pre-registered clients at all: every client arrives one of the two ways.
@@ -129,7 +130,9 @@ On the assistant side (`McpClientApp/Program.cs`), using the C# MCP SDK client (
 
 - `ClientOAuthOptions.ClientMetadataDocumentUri` is the document's URL. The SDK sends it as the `client_id` when the provider advertises support, and registers the client otherwise. `--Registration dynamic` leaves it out, so the assistant registers even here.
 - The app serves the vendor's document and receives the provider's redirect. The assistant's name and redirect URI are read from the document both ways, so the document and the registration cannot say different things.
-- `ScopeSelector` keeps the assistant to the scopes in its `Scopes` setting when one is given.
+- `ScopeSelector` takes the scope the tracker names, keeps the assistant to its `Scopes` setting when one is given, and adds the `RegistrationScopes` when the assistant registers itself.
+- It accepts a plain `http` address for the tracker only on this computer (`localhost`, `127.0.0.1`, `::1`), because the access token travels in every request.
+- Every sign-in prints the scopes it asks for, so a run shows the first sign-in and the step-up.
 - `AuthorizationCallbackHandler` returns `code`, `state` and `iss` from the redirect, so the SDK checks both `state` and the issuer. `BrowserSignIn` prints the authorization URL and waits for the browser to come back. `HeadlessSignIn` posts the provider's sign-in form itself as the demo employee, for a run with no one at the keyboard.
 
 The applications meet in configuration. `McpServer:Resource` and `McpServer:Scopes` in the provider's `appsettings.json` must equal `Mcp:Resource` and `Mcp:Scopes` in the tracker's, because one writes them into tokens and the other compares tokens against them. The provider's `AllowedClientIdPrefixes` must cover the `client_id` in the assistant's document.
@@ -150,7 +153,7 @@ Then run the assistant:
 dotnet run --project McpServerSample/McpClientApp
 ```
 
-It prints the authorization URL. Open it in a browser, sign in as `john.doe@example.com` with password `Jd!2024$3cur3` (in memory, visible in `ProviderApp/Program.cs`), and allow the assistant on the consent page. The terminal then shows the provider fetching the document (`Served the metadata document (Accept: application/json)`), and the assistant listing the tasks, adding one, closing it and listing them again. The provider keeps the document for as long as it may, which for a response with no cache headers, as this app's is, means `MinimumCacheDuration`; a second run within that time shows no fetch. The assistant waits for the sign-in as long as `Client:SignInTimeout` in its `appsettings.json` allows, then stops and says so. If the browser shows an error instead of the sign-in page, the provider refused the request and its log says why; it does not redirect back after that, so stop the assistant with Ctrl+C.
+It prints the authorization URL. Open it in a browser, sign in as `john.doe@example.com` with password `Jd!2024$3cur3` (in memory, visible in `ProviderApp/Program.cs`), and allow the assistant on the consent page. The terminal then shows the provider fetching the document (`Served the metadata document (Accept: application/json)`), and the assistant listing the tasks. When it adds one, it prints a second sign-in asking for `tasks.write`: sign in and allow again, and it adds the task, closes it and lists them again. The provider keeps the document for as long as it may, which for a response with no cache headers, as this app's is, means `MinimumCacheDuration`; a second run within that time shows no fetch. The assistant waits for the sign-in as long as `Client:SignInTimeout` in its `appsettings.json` allows, then stops and says so. If the browser shows an error instead of the sign-in page, the provider refused the request and its log says why; it does not redirect back after that, so stop the assistant with Ctrl+C.
 
 Other ways to run it:
 
@@ -160,7 +163,7 @@ dotnet run --project McpServerSample/McpClientApp -- --Scopes:0 tasks.read
 dotnet run --project McpServerSample/McpClientApp -- --SignIn headless
 ```
 
-The first registers the assistant instead. The second lets it read the tasks only, so it lists them and is refused with 403 when it tries to add one. The third signs in without a browser and answers the consent page with `HeadlessSignIn:Consent` (`allow`, or `deny` to see the refusal), running the whole flow on its own.
+The first registers the assistant instead. The second lets it read the tasks only, so it lists them and is refused with 403 when it tries to add one. The third signs in without a browser and answers the consent page with `HeadlessSignIn:Consent` (`allow`, or `deny` to see the refusal), running the whole flow on its own; `--HeadlessSignIn:GrantedScopes:0 tasks.read` makes it clear every other scope on the page, as an employee allowing reading alone would.
 
 Another MCP client that supports authorization works too, pointed at `https://localhost:5008/mcp`. One that registers itself has to send `application_type` `native`, as the MCP specification requires of it, and has to run on the desktop or the command line rather than inside a web page, because the registration endpoint and the tracker answer requests from the client application itself. One known by its metadata document is accepted only when its `client_id` starts with a prefix in `AllowedClientIdPrefixes`, so add its vendor's prefix there first.
 
@@ -177,7 +180,7 @@ The first returns `401` with the challenge, the second the resource metadata, an
 ## Before you take it further
 
 - The client name on the consent page is whatever the client registered or its document claims, and the page says which. A provider that verifies some clients in another way can let those through without the page.
-- Use your own client secret encryption key. A provider that serves registration keeps each `client_secret` it issues encrypted with `Provider:ClientSecretEncryptionKey`, so a client reading its registration gets its secret back, and it does not start without the key or with one shorter than 32 bytes. The key in `ProviderApp/appsettings.json` is published with the sample, so it keeps no secret from anyone who can read the stored registrations. Generate 32 random bytes, for example with `openssl rand -base64 32`, and set the key through an environment variable or a secret store rather than in the file.
+- Use your own client secret encryption key. A provider that serves registration keeps each `client_secret` it issues encrypted with `Provider:ClientSecretEncryptionKey`, so a client reading its registration gets its secret back, and it does not start without the key or with one shorter than 32 bytes. The key in `ProviderApp/appsettings.json` is published with the sample, so it keeps no secret from anyone who can read the stored registrations. Generate 32 random bytes, for example with `openssl rand -base64 32`, and set the key through an environment variable or a secret store rather than in the file. Outside the Development environment the provider refuses to start while the key comes from `appsettings.json`.
 - Registered clients live in memory and are gone when the provider restarts. A client holding a `client_id` from before the restart has to register again. A client known by its document has nothing to redo: the provider fetches the document again.
 - The tasks live in memory too, and every employee's list starts from the same seed tasks (`Tracker:SeedTasks`).
 - Signing keys are generated at startup, so a restarted provider invalidates every token issued before. The tracker refuses tokens signed with the new key until it fetches the provider's keys again: `JwtBearer` does that by itself on meeting an unknown key, at most once per its refresh interval. Restarting the tracker along with the provider recovers at once. Until then the assistant stops with a 401 and says to restart the tracker.
@@ -188,7 +191,7 @@ The first returns `401` with the challenge, the second the resource metadata, an
 
 - `ProviderApp/Program.cs`: the tenant with the tracker as its resource, metadata documents limited to the allowed prefixes, open registration, the limits both kinds of client share, and the sign-in and consent endpoints.
 - `ProviderApp/ConsentPageDecisions.cs`: the consent provider that holds each request's consent until the employee answers the consent page.
-- `ProviderApp/appsettings.json`: the issuer, the client secret encryption key, the tracker's resource URI and scopes, and the allowed client identifier prefixes.
+- `ProviderApp/appsettings.json`: the issuer, the client secret encryption key, the registration rate limit, the tracker's resource URI and scopes, and the allowed client identifier prefixes.
 - `McpServerApp/Program.cs`: `JwtBearer` bound to the provider and to the tracker's own audience, the MCP authentication scheme with the resource metadata, the scope policies, the gate, and `MapMcp`.
 - `McpServerApp/TaskTools.cs`, `McpServerApp/TaskTracker.cs`: the tools and the in-memory tasks.
 - `McpServerApp/ToolScopeGate.cs`: the 403 naming the scope a tool needs.
@@ -198,7 +201,7 @@ The first returns `401` with the challenge, the second the resource metadata, an
 - `McpClientApp/client-metadata.json`: the vendor's metadata document.
 - `McpClientApp/Program.cs`: serving the document, the SDK's OAuth options both ways, and the calls the assistant makes.
 - `McpClientApp/BrowserSignIn.cs`, `McpClientApp/HeadlessSignIn.cs`: the two ways the employee signs in.
-- `McpClientApp/appsettings.json`: the tracker's address, the document, the sign-in timeout, the way to become known, the scopes, the sign-in mode and the headless run's consent answer.
+- `McpClientApp/appsettings.json`: the tracker's address, the document, the sign-in timeout, the way to become known, the scopes, the scopes it registers with, the sign-in mode and the headless run's consent answer.
 
 ## The specifications behind this sample
 
