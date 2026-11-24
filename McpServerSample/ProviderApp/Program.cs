@@ -84,6 +84,7 @@ builder.Services.AddSingleton<IUserConsentsProvider>(services => services.GetReq
 
 var oidcServer = builder.Services.AddOidcServices(options =>
 {
+    // #region new-client-options
     // MCP clients have no relationship with this provider before they connect, so a client without a metadata
     // document registers itself (RFC 7591). Registration without an initial access token is what lets it do that
     // unattended; the library's default asks for one.
@@ -102,13 +103,16 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         // reports, is enough, so the client gets its refresh token.
         OfflineAccess = OfflineAccess.Allowed,
     };
+    // #endregion
 
 #pragma warning disable ABX9001 // Client ID Metadata Documents are experimental until the draft becomes an RFC
+    // #region cimd-prefixes
     // A client may name itself by the https URL of a metadata document it publishes instead of registering
     // (draft-ietf-oauth-client-id-metadata-document-03). With prefixes set, the provider fetches only documents under
     // them, so a URL of an untrusted vendor is refused without a request leaving the provider; the user still
     // approves every client on the consent page.
     options.ClientIdMetadataDocuments.AllowedClientIdPrefixes = allowedClientIdPrefixes;
+    // #endregion
 
     // McpClientApp serves its document on this machine, and the draft forbids fetching one from a special-use address
     // (section 10.7) except on a development machine whose authorization server is itself on loopback. The library
@@ -130,6 +134,7 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         // Where the provider sends the user while ConsentPageDecisions holds the request's consent pending
         ConsentUri = new Uri("/Auth/Consent", UriKind.Relative),
 
+        // #region resource-definition
         // The task tracker's MCP server as a protected resource, with a scope for reading the employee's tasks and
         // one for changing them. A client naming it in the resource parameter gets an access token whose audience
         // is exactly this URI, which is what the MCP server checks. Registration accepts a scope a resource declares.
@@ -140,6 +145,7 @@ var oidcServer = builder.Services.AddOidcServices(options =>
                 new ScopeDefinition(readScope),
                 new ScopeDefinition(writeScope)),
         ],
+        // #endregion
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
 
@@ -169,6 +175,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
 
+// #region registration-rate-limit
 // Registrations are counted per client address; every other OIDC endpoint passes unlimited. The registration endpoint
 // is recognised by the address the library publishes for it.
 builder.Services.AddRateLimiter(options =>
@@ -188,6 +195,7 @@ builder.Services.AddRateLimiter(options =>
             : RateLimitPartition.GetNoLimiter("");
     });
 });
+// #endregion
 
 var app = builder.Build();
 
@@ -203,11 +211,15 @@ app.Use((context, next) =>
 });
 
 app.UseRouting();
-app.UseRateLimiter();
 app.UseCors();
 app.UseAuthorization();
 
+// #region rate-limit-endpoints
+// After routing, so the policy sees which endpoint a request reached
+app.UseRateLimiter();
+
 app.MapOidcEndpoints().RequireRateLimiting(RegistrationRateLimit);
+// #endregion
 
 app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
     Results.Content(LoginPage(antiforgery.GetAndStoreTokens(context), request_uri, error: null), "text/html"));
