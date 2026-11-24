@@ -73,7 +73,11 @@ builder.Services
             {
                 Resource = resource.OriginalString,
                 AuthorizationServers = { authorizationServer },
-                ScopesSupported = [readScope, writeScope],
+                // The MCP specification: scopes_supported "is intended to represent the minimal set of scopes
+                // necessary for basic functionality", with further scopes requested through step-up. A client starts
+                // with reading; the first call that changes a task is answered 403 naming tasks.write (ToolScopeGate),
+                // and the client asks the user for it then, so a token that only ever reads never carries it.
+                ScopesSupported = [readScope],
                 ResourceName = resourceName,
             };
         });

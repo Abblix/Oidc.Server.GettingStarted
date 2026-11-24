@@ -8,7 +8,13 @@ using ModelContextProtocol.Protocol;
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
+// The access token travels to the MCP server in every request, so plain http is accepted only to this computer
 var mcpServer = AbsoluteUri(configuration["Mcp:Server"], "Mcp:Server", Uri.UriSchemeHttps, Uri.UriSchemeHttp);
+if (mcpServer.Scheme == Uri.UriSchemeHttp && !mcpServer.IsLoopback)
+{
+    throw new InvalidOperationException(
+        $"Mcp:Server is '{mcpServer}'; plain http is accepted only on this computer (localhost, 127.0.0.1, ::1), use https");
+}
 var documentFile = configuration["Client:MetadataDocument"]
                    ?? throw new InvalidOperationException("Client:MetadataDocument is not configured");
 var newTaskTitle = configuration["Demo:NewTask"] ?? throw new InvalidOperationException("Demo:NewTask is not configured");
@@ -17,8 +23,13 @@ var signInTimeout = TimeSpan.TryParse(configuration["Client:SignInTimeout"], out
     : throw new InvalidOperationException(
         $"Client:SignInTimeout is '{configuration["Client:SignInTimeout"]}'; it has to be a positive time span such as 00:05:00");
 
-// The scopes the assistant asks for, or none configured to ask for every scope the tracker names
+// The scopes the assistant is limited to, or none configured to take whatever the tracker asks for
 var requestedScopes = configuration.GetSection("Scopes").Get<string[]>();
+
+// A client that registers itself names its scopes in the registration, and the provider holds it to them, so a scope
+// asked for later could not be added by step-up; such a client registers, and asks, for every scope it will use
+var registrationScopes = configuration.GetSection("RegistrationScopes").Get<string[]>()
+                         ?? throw new InvalidOperationException("RegistrationScopes is not configured");
 
 // The document is the one description of the assistant: its URL is the client_id, and the name and the redirect URI
 // a dynamic registration sends are read from it as well
@@ -59,7 +70,8 @@ ISignIn signIn = configuration["SignIn"] switch
             "allow" => "allow",
             "deny" => "deny",
             var other => throw new InvalidOperationException($"HeadlessSignIn:Consent is '{other}'; use allow or deny"),
-        }),
+        },
+        configuration.GetSection("HeadlessSignIn:GrantedScopes").Get<string[]>()),
     var other => throw new InvalidOperationException($"SignIn is '{other}'; use browser or headless"),
 };
 
@@ -98,15 +110,26 @@ var oauth = new ClientOAuthOptions
         },
     },
 
-    // The SDK takes the scopes the tracker names. Kept to the configured ones, a refusal for a missing scope is final:
-    // the SDK asks again only when that adds a scope (step-up authorization), and here it cannot
-    ScopeSelector = requestedScopes is null
-        ? null
-        : candidates => candidates?.Where(scope => requestedScopes.Contains(scope) || scope == "offline_access"),
+    // Known by its document, the assistant takes the scope the tracker names, tasks.read, and asks for tasks.write only
+    // when a call needs it (step-up authorization). Kept to the configured scopes, a refusal for a missing scope is
+    // final: the SDK asks again only when that adds a scope, and here it cannot. Registering itself, it asks up front
+    // for the scopes it registers with.
+    ScopeSelector = candidates => (requestedScopes, useMetadataDocument) switch
+    {
+        ({ } limit, _) => candidates?.Where(scope => limit.Contains(scope) || scope == "offline_access"),
+        (null, true) => candidates,
+        (null, false) => (candidates ?? []).Union(registrationScopes),
+    },
 
     // The handler returns the code together with state and iss, so the SDK checks both: section 7 of the draft makes iss
-    // mandatory in the authorization response
-    AuthorizationCallbackHandler = signIn.AuthorizeAsync,
+    // mandatory in the authorization response. It runs once at the start and again whenever the tracker asks for a
+    // scope the token lacks, so the line it prints shows what each sign-in asks for.
+    AuthorizationCallbackHandler = (context, cancellationToken) =>
+    {
+        var scope = System.Web.HttpUtility.ParseQueryString(context.AuthorizationUri.Query)["scope"];
+        Console.WriteLine($"Asking the employee to sign in and allow: {scope}");
+        return signIn.AuthorizeAsync(context, cancellationToken);
+    },
 };
 
 Console.WriteLine(useMetadataDocument

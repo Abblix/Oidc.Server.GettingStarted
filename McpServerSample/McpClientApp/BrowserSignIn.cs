@@ -9,18 +9,21 @@ namespace McpClientApp;
 /// </summary>
 public sealed class BrowserSignIn(string clientName, Uri redirectUri) : ISignIn
 {
-    private readonly TaskCompletionSource<AuthorizationResult> _response =
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    // One per sign-in: the SDK signs in again when the tracker asks for a scope the token lacks, and that sign-in waits
+    // for a redirect of its own, not the first one's
+    private TaskCompletionSource<AuthorizationResult> _response = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async Task<AuthorizationResult?> AuthorizeAsync(
         AuthorizationCallbackContext context,
         CancellationToken cancellationToken)
     {
+        var response = new TaskCompletionSource<AuthorizationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _response = response;
         Console.WriteLine("Open this address in a browser and sign in:");
         Console.WriteLine(context.AuthorizationUri);
         Console.WriteLine("An error page there instead of the login page means the provider refused the request, and " +
                           "its log says why; the provider does not redirect back after that, so stop this app with Ctrl+C.");
-        return await _response.Task.WaitAsync(cancellationToken);
+        return await response.Task.WaitAsync(cancellationToken);
     }
 
     /// <summary>

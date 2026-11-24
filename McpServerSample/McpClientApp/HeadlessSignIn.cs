@@ -8,11 +8,17 @@ namespace McpClientApp;
 
 /// <summary>
 /// Plays the user's browser without one: follows the provider's redirects to its login page, posts the form with the
-/// demo user's credentials, answers the consent page with <paramref name="consent"/> (allow or deny), and reads the
-/// response from the redirect back to <paramref name="redirectUri"/>, which it never requests. For running the flow
-/// unattended against the sample provider, whose login form and consent page it knows.
+/// demo user's credentials, answers the consent page with <paramref name="consent"/> (allow or deny), leaving checked
+/// only the scopes in <paramref name="grantedScopes"/> when it is given, and reads the response from the redirect back to
+/// <paramref name="redirectUri"/>, which it never requests. For running the flow unattended against the sample
+/// provider, whose login form and consent page it knows.
 /// </summary>
-public sealed class HeadlessSignIn(Uri redirectUri, string email, string password, string consent) : ISignIn
+public sealed class HeadlessSignIn(
+    Uri redirectUri,
+    string email,
+    string password,
+    string consent,
+    string[]? grantedScopes) : ISignIn
 {
     private const int MaxRedirects = 10;
 
@@ -55,6 +61,14 @@ public sealed class HeadlessSignIn(Uri redirectUri, string email, string passwor
         return new AuthorizationResult { Code = query["code"], State = query["state"], Iss = query["iss"] };
     }
 
+    /// <summary>
+    /// Whether a browser would send the field: a checkbox only while checked, a scope checkbox only when
+    /// <see cref="grantedScopes"/> names it or names nothing.
+    /// </summary>
+    private bool IsSent(IHtmlInputElement input)
+        => input.Type != "checkbox" ||
+           (input.IsChecked && (input.Name != "scope" || grantedScopes is null || grantedScopes.Contains(input.Value)));
+
     private bool IsAt(Uri uri) => uri.GetLeftPart(UriPartial.Path) == redirectUri.GetLeftPart(UriPartial.Path);
 
     private static async Task<bool> IsConsentPageAsync(string page, CancellationToken cancellationToken)
@@ -75,11 +89,12 @@ public sealed class HeadlessSignIn(Uri redirectUri, string email, string passwor
                        as IHtmlFormElement
                    ?? throw new InvalidOperationException($"No form at {pageUri}");
 
+        // What a browser submits: every named field, a checkbox only while checked, and the user's own entries
         var fields = form.Elements.OfType<IHtmlInputElement>()
-            .Where(input => !string.IsNullOrEmpty(input.Name))
-            .ToDictionary(input => input.Name!, input => input.Value);
-        foreach (var (name, value) in values)
-            fields[name] = value;
+            .Where(input => !string.IsNullOrEmpty(input.Name) && !values.ContainsKey(input.Name!) && IsSent(input))
+            .Select(input => KeyValuePair.Create(input.Name!, input.Value))
+            .Concat(values)
+            .ToList();
 
         var posted = await browser.PostAsync(
             new Uri(pageUri, form.GetAttribute("action")),

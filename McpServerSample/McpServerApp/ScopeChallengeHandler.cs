@@ -13,7 +13,8 @@ namespace McpServerApp;
 /// <remarks>
 /// The SDK's own challenge carries only resource_metadata. The MCP authorization specification adds that servers
 /// "SHOULD include a scope parameter in the WWW-Authenticate header", which clients then request first, and that a
-/// token lacking a scope gets 403 with error="insufficient_scope" naming the scopes needed.
+/// token lacking a scope gets 403 with error="insufficient_scope" naming the scopes needed. The 401 names the scopes the
+/// resource metadata lists, the minimal set a client starts with, rather than the whole catalog.
 /// </remarks>
 public sealed class ScopeChallengeHandler(
     IOptionsMonitor<McpAuthenticationOptions> options,
