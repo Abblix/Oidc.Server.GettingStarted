@@ -1,4 +1,5 @@
 using System.Net;
+using System.Threading.RateLimiting;
 using Abblix.Jwt;
 using Abblix.Oidc;
 using Abblix.Oidc.Server.AspNetCore;
@@ -19,6 +20,8 @@ using Abblix.Oidc.Server.Model;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration.Json;
 using ProviderApp;
 using UriBuilder = Abblix.Utils.UriBuilder;
 
@@ -41,6 +44,26 @@ if (string.IsNullOrWhiteSpace(clientSecretEncryptionKey))
     throw new InvalidOperationException(
         $"{clientSecretEncryptionKeySetting} is not configured: set it to 32 random bytes, base64");
 }
+
+// The key in appsettings.json is published with the sample, so it keeps the stored secrets from nobody. It serves
+// development alone: anywhere else the value has to come from a source of the deployment's own, an environment
+// variable or a secret store, and the last provider holding the setting is the one whose value is used.
+var keySource = ((IConfigurationRoot)configuration).Providers.Last(provider => provider.TryGet(clientSecretEncryptionKeySetting, out _));
+if (!builder.Environment.IsDevelopment() && keySource is JsonConfigurationProvider { Source.Path: "appsettings.json" })
+{
+    throw new InvalidOperationException(
+        $"{clientSecretEncryptionKeySetting} is the key published in appsettings.json, which serves development " +
+        "only. Set your own, 32 random bytes in base64, through an environment variable or a secret store.");
+}
+
+// Open registration lets anyone create clients, so each address may register only so many in a window
+const string RegistrationRateLimit = "registration";
+var registrationPermits = configuration.GetValue<int?>("Registration:PermitLimit") is { } permits and > 0
+    ? permits
+    : throw new InvalidOperationException("Registration:PermitLimit has to be a positive number of registrations");
+var registrationWindow = TimeSpan.TryParse(configuration["Registration:Window"], out var window) && window > TimeSpan.Zero
+    ? window
+    : throw new InvalidOperationException("Registration:Window has to be a positive time span such as 00:01:00");
 
 var userStore = new TestUserStore(
     new TestUser(
@@ -145,6 +168,24 @@ builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
 
+// Registrations are counted per client address; every other OIDC endpoint passes unlimited. The registration endpoint
+// is recognised by the address the library publishes for it.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(RegistrationRateLimit, context =>
+    {
+        var registration = context.RequestServices.GetRequiredService<IOidcEndpointResolver>()
+            .Resolve(OidcEndpoints.RegisterClient)!;
+
+        return HttpMethods.IsPost(context.Request.Method) && context.Request.Path == registration.AbsolutePath
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = registrationPermits, Window = registrationWindow })
+            : RateLimitPartition.GetNoLimiter("");
+    });
+});
+
 var app = builder.Build();
 
 // Every page this provider renders - the login form, a consent or error page - acts for the user on a click, and a
@@ -159,10 +200,11 @@ app.Use((context, next) =>
 });
 
 app.UseRouting();
+app.UseRateLimiter();
 app.UseCors();
 app.UseAuthorization();
 
-app.MapOidcEndpoints();
+app.MapOidcEndpoints().RequireRateLimiting(RegistrationRateLimit);
 
 app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
     Results.Content(LoginPage(antiforgery.GetAndStoreTokens(context), request_uri, error: null), "text/html"));
@@ -250,6 +292,7 @@ app.MapGet("/Auth/Consent", async (
 app.MapPost("/Auth/Consent", async (
         [FromForm] string requestUri,
         [FromForm] string decision,
+        [FromForm(Name = "scope")] string[]? scopes,
         IAntiforgery antiforgery,
         HttpContext context,
         IAuthSessionService authService,
@@ -269,23 +312,31 @@ app.MapPost("/Auth/Consent", async (
 
         // Only a request the provider sent the user here with can be answered
         var tenant = tenantAccessor.CurrentTenant();
-        if (await requestStorage.TryGetAsync(tenant, storedUri) == null)
+        if (await requestStorage.TryGetAsync(tenant, storedUri) is not { } request)
             return Results.Content(ExpiredPage(), "text/html");
 
-        // The value comes from the browser, so anything but the two buttons' values is a bad request, not a fault
-        bool? granted = decision switch
-        {
-            "allow" => true,
-            "deny" => false,
-            _ => null,
-        };
-        if (granted == null)
+        // The values come from the browser, so anything but the two buttons' values, or a scope the request did not
+        // ask for, is a bad request, not a fault. Allow with every scope cleared grants nothing, which is a refusal.
+        var checkedScopes = scopes ?? [];
+        if (!checkedScopes.All(scope => request.Scope.Contains(scope, StringComparer.Ordinal)))
             return Results.BadRequest();
 
-        decisions.Record(tenant, authSession, storedUri, granted.Value);
+        switch (decision)
+        {
+            case "allow" when checkedScopes.Length > 0:
+                decisions.Record(tenant, authSession, storedUri, checkedScopes);
+                break;
 
-        // Back to the authorization endpoint, which resumes the request: a code for the client when the user
-        // allowed it, access_denied when not
+            case "allow" or "deny":
+                decisions.Record(tenant, authSession, storedUri, grantedScopes: null);
+                break;
+
+            default:
+                return Results.BadRequest();
+        }
+
+        // Back to the authorization endpoint, which resumes the request: a code for the scopes the user allowed,
+        // access_denied when the user allowed none
         var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
             { Query = { [AuthorizationRequest.Parameters.RequestUri] = storedUri.OriginalString } };
         return Results.Redirect(authorizeUrl);
@@ -303,10 +354,11 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
     var redirectUri = WebUtility.HtmlEncode(request.RedirectUri?.OriginalString ?? "");
     var redirectHost = WebUtility.HtmlEncode(request.RedirectUri?.Host ?? "");
 
-    // This provider has no configured clients, and its registration refuses a client_id that is an https URL, so a
-    // client_id written as one is the address of a metadata document. Its name is the document's claim; the host it
-    // is published on is the one thing the provider checked (draft-ietf-oauth-client-id-metadata-document-03 section
-    // 10.10). The URL is recognised the way the library recognises a client identifier URL, character for character.
+    // The provider assigns the client_id of every client that registers, so no registered client has one that is an
+    // https URL, and a client_id written as one is the address of a metadata document. Its name is the document's
+    // claim; the host it is published on is the one thing the provider checked (draft-ietf-oauth-client-id-metadata-
+    // document-03 section 10.10). The URL is recognised the way the library recognises a client identifier URL,
+    // character for character.
     var origin = request.ClientId is { } id &&
                  id.StartsWith("https://", StringComparison.Ordinal) &&
                  Uri.TryCreate(id, UriKind.Absolute, out var documentUrl) &&
@@ -314,7 +366,21 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
         ? $"Its description is published at <b>{WebUtility.HtmlEncode(documentUrl.Authority)}</b>, and the name is " +
           "that description's claim."
         : "It registered itself with this provider, so the name is its own claim.";
-    var scopes = string.Join("", request.Scope.Select(scope => $"<li>{WebUtility.HtmlEncode(scope)}</li>"));
+
+    // The MCP specification: authorization servers "SHOULD display additional warnings for localhost-only redirect
+    // URIs". Any program on the user's computer can listen on a loopback port, so the code may reach one the user
+    // never meant to authorize.
+    var loopbackWarning = request.RedirectUri is { IsLoopback: true }
+        ? "<p><b>The code goes to a program on this computer.</b> Any program running on it could receive the code, " +
+          "so allow only if you have just started this application yourself.</p>"
+        : "";
+
+    // Each scope is granted on its own: the user may allow the application to read without letting it change
+    var scopes = string.Join("", request.Scope.Select(scope =>
+    {
+        var value = WebUtility.HtmlEncode(scope);
+        return $"""<li><label><input type="checkbox" name="scope" value="{value}" checked /> {value}</label></li>""";
+    }));
     var resources = string.Join("", (request.Resources ?? [])
         .Select(resource => $"<li>{WebUtility.HtmlEncode(resource.OriginalString)}</li>"));
     return $"""
@@ -325,13 +391,14 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
             <h1>Allow {client}?</h1>
             <p>The application <b>{client}</b> (client ID <code>{clientId}</code>) asks to act for you. {origin}</p>
             <p>If you allow it, the provider sends the authorization code to <b>{redirectHost}</b>: <code>{redirectUri}</code></p>
-            <p>Scopes:</p>
-            <ul>{scopes}</ul>
-            <p>Resources:</p>
-            <ul>{resources}</ul>
+            {loopbackWarning}
             <form method="post" action="/Auth/Consent">
                 <input type="hidden" name="{WebUtility.HtmlEncode(tokens.FormFieldName)}" value="{WebUtility.HtmlEncode(tokens.RequestToken)}" />
                 <input type="hidden" name="requestUri" value="{WebUtility.HtmlEncode(requestUri.OriginalString)}" />
+                <p>Scopes it may use (clear one to refuse it):</p>
+                <ul>{scopes}</ul>
+                <p>Resources:</p>
+                <ul>{resources}</ul>
                 <button type="submit" name="decision" value="allow">Allow</button>
                 <button type="submit" name="decision" value="deny">Deny</button>
             </form>

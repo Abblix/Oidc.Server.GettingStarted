@@ -1,4 +1,5 @@
 using Abblix.Oidc.Server.Common.Configuration;
+using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Endpoints.Authorization.Interfaces;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
@@ -32,12 +33,13 @@ public sealed class ConsentPageDecisions(IMemoryCache cache, IOptions<OidcOption
     : IUserConsentsProvider
 {
     /// <summary>
-    /// Records the user's answer on the consent page for the request stored under <paramref name="requestUri"/>.
+    /// Records the user's answer on the consent page for the request stored under <paramref name="requestUri"/>:
+    /// the scopes the user allowed, or null when the user refused the request.
     /// </summary>
-    public void Record(TenantDefinition tenant, AuthSession authSession, Uri requestUri, bool granted)
+    public void Record(TenantDefinition tenant, AuthSession authSession, Uri requestUri, string[]? grantedScopes)
         => cache.Set(
             Key(tenant, authSession, requestUri),
-            new Decision(granted, clock.GetUtcNow()),
+            new Decision(grantedScopes, clock.GetUtcNow()),
             options.Value.AuthenticationRequestExpiresIn);
 
     /// <inheritdoc />
@@ -66,9 +68,21 @@ public sealed class ConsentPageDecisions(IMemoryCache cache, IOptions<OidcOption
 
         // A consent that grants nothing and leaves nothing pending is the user's refusal: the client gets
         // access_denied
-        return Task.FromResult(decision.Granted
-            ? new UserConsents { Granted = asked, GivenAt = decision.GivenAt }
-            : new UserConsents { GivenAt = decision.GivenAt });
+        if (decision.GrantedScopes is not { } grantedScopes)
+            return Task.FromResult(new UserConsents { GivenAt = decision.GivenAt });
+
+        // The scopes the user left checked, and nothing left pending: the token carries this subset, and a scope the
+        // user cleared is simply not granted. A resource carries the scopes asked of it as well, so they are narrowed
+        // there too, or the cleared scope would reach the token through its resource.
+        bool Checked(ScopeDefinition scope) => grantedScopes.Contains(scope.Scope, StringComparer.Ordinal);
+        var granted = asked with
+        {
+            Scopes = Array.FindAll(asked.Scopes, Checked),
+            Resources = Array.ConvertAll(
+                asked.Resources,
+                resource => resource with { Scopes = Array.FindAll(resource.Scopes, Checked) }),
+        };
+        return Task.FromResult(new UserConsents { Granted = granted, GivenAt = decision.GivenAt });
     }
 
     private static DecisionKey Key(TenantDefinition tenant, AuthSession authSession, Uri requestUri)
@@ -76,9 +90,9 @@ public sealed class ConsentPageDecisions(IMemoryCache cache, IOptions<OidcOption
 
     private sealed record DecisionKey(string TenantId, string SessionId, string RequestUri);
 
-    private sealed class Decision(bool granted, DateTimeOffset givenAt)
+    private sealed class Decision(string[]? grantedScopes, DateTimeOffset givenAt)
     {
-        public bool Granted { get; } = granted;
+        public string[]? GrantedScopes { get; } = grantedScopes;
         public DateTimeOffset GivenAt { get; } = givenAt;
         public int Claimed;
     }
