@@ -11,6 +11,7 @@ using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.Storages;
 using Abblix.Oidc.Server.Features.Tokens.Revocation;
 using Abblix.Oidc.Server.MinimalApi;
+using Microsoft.Extensions.Configuration.Json;
 using RegistrationProviderApp;
 
 const string tenantId = "main";
@@ -39,6 +40,17 @@ if (string.IsNullOrWhiteSpace(clientSecretEncryptionKey))
 {
     throw new InvalidOperationException(
         $"{clientSecretEncryptionKeySetting} is not configured: set it to 32 random bytes, base64");
+}
+
+// The key in appsettings.json is published with the sample, so it keeps the stored secrets from nobody. It serves
+// development alone: anywhere else the value has to come from a source of the deployment's own, an environment
+// variable or a secret store, and the last provider holding the setting is the one whose value is used.
+var keySource = ((IConfigurationRoot)configuration).Providers.Last(provider => provider.TryGet(clientSecretEncryptionKeySetting, out _));
+if (!builder.Environment.IsDevelopment() && keySource is JsonConfigurationProvider { Source.Path: "appsettings.json" })
+{
+    throw new InvalidOperationException(
+        $"{clientSecretEncryptionKeySetting} is the key published in appsettings.json, which serves development " +
+        "only. Set your own, 32 random bytes in base64, through an environment variable or a secret store.");
 }
 
 builder.Services.AddSingleton(OperatorKey.FromConfiguration(configuration, "Operator:KeyHash"));
