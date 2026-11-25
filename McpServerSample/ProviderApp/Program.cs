@@ -115,14 +115,19 @@ var oidcServer = builder.Services.AddOidcServices(options =>
     // (draft-ietf-oauth-client-id-metadata-document-03). With prefixes set, the provider fetches only documents under
     // them, so a URL of an untrusted vendor is refused without a request leaving the provider; the user still
     // approves every client on the consent page.
-    options.ClientIdMetadataDocuments.AllowedClientIdPrefixes = allowedClientIdPrefixes;
-    // #endregion
+    options.ClientIdMetadataDocuments = new ClientIdMetadataDocumentOptions
+    {
+        AllowedClientIdPrefixes = allowedClientIdPrefixes,
 
-    // McpClientApp serves its document on this machine, and the draft forbids fetching one from a special-use address
-    // (section 10.7) except on a development machine whose authorization server is itself on loopback. The library
-    // applies this only while the tenant's issuer is on loopback, and a Production host does not start with it.
-    if (builder.Environment.IsDevelopment())
-        options.ClientIdMetadataDocuments.DocumentAddresses = ClientIdMetadataDocumentAddresses.AllowLoopback;
+        // McpClientApp serves its document on this machine, and the draft forbids fetching one from a special-use
+        // address (section 10.7) except on a development machine whose authorization server is itself on loopback.
+        // The library applies this only while the tenant's issuer is on loopback, and a Production host does not
+        // start with it.
+        DocumentAddresses = builder.Environment.IsDevelopment()
+            ? ClientIdMetadataDocumentAddresses.AllowLoopback
+            : ClientIdMetadataDocumentAddresses.PublicOnly,
+    };
+    // #endregion
 #pragma warning restore ABX9001
 
     options.Tenants.Add(new TenantDefinition
