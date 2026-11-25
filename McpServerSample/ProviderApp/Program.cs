@@ -92,9 +92,9 @@ var oidcServer = builder.Services.AddOidcServices(options =>
 
     options.NewClientOptions = new NewClientOptions
     {
-        // Open registration would otherwise admit any grant type the server supports, client_credentials included,
-        // which gets a token for the MCP server with no user behind it. An MCP client acts for a user through the
-        // authorization code flow, renewed by refresh tokens, so a registration asking for anything else is refused.
+        // These are the library's defaults, written out so the sample shows the policy: an MCP client acts for a user
+        // through the authorization code flow, renewed by refresh tokens, so a registration asking for anything else,
+        // client_credentials included (a token for the MCP server with no user behind it), is refused.
         AllowedGrantTypes = [GrantTypes.AuthorizationCode, GrantTypes.RefreshToken],
 
         // An MCP client asks for offline_access to keep working after its access token expires, usually without
