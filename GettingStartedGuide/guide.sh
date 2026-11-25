@@ -482,9 +482,10 @@ claims = dict(item.split(": ", 1) for item in Page(body).items if ": " in item)
 for claim, value in (("sub", "1234567890"), ("name", "John Doe"), ("email", EMAIL)):
     if claims.get(claim) != value:
         fail(f"the claims page shows {claim}={claims.get(claim)!r}, expected {value!r}; it shows {claims}")
-for claim in ("sid", "auth_time"):
-    if not claims.get(claim):
-        fail(f"the claims page shows no {claim}; it shows {claims}")
+# No sid: the provider puts it into an ID token only for a client with front- or back-channel logout,
+# and the guide's client has neither
+if not claims.get("auth_time"):
+    fail(f"the claims page shows no auth_time; it shows {claims}")
 print(f"check the claims: {', '.join(f'{name}={value}' for name, value in claims.items())}")
 
 step = "sign out"
