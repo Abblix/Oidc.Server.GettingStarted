@@ -40,15 +40,23 @@ var streams = builder.Configuration.GetSection(StreamsSection).Get<IReadOnlyList
 //
 // The key id has to be minted with the key, not fixed in the source. A receiver caches keys by "kid" and
 // refetches the JWK Set only when a token names one it does not hold, so a new key wearing the previous
-// name is never fetched: the receiver keeps verifying against the key it already has and answers every
-// delivery "400". Restart this app with the id hardcoded and that is exactly what happens.
+// name is never fetched: the receiver keeps verifying against the key it already has and refuses every
+// delivery with "invalid_key".
 //
+// DEMO ONLY: PinnedKeyId exists to show that failure without editing this file, and is absent from
+// appsettings.json on purpose. Pass it on the command line and every run signs under that one id; the
+// README walks through the restart that then breaks delivery. A real transmitter has no such setting.
+const string PinnedKeyIdKey = "PinnedKeyId";
+var pinnedKeyId = builder.Configuration[PinnedKeyIdKey];
+if (pinnedKeyId is { Length: 0 })
+    throw new InvalidOperationException($"Configuration key '{PinnedKeyIdKey}' is empty: give it a key id, or leave it out to mint one per run.");
+
 // 2048 bits is the floor RS256 is deployed at; a host with its own key size policy sets that instead of
 // inheriting this number from a sample.
 using var rsa = RSA.Create(2048);
 var signingKey = new RsaJsonWebKey
     {
-        KeyId = $"ssf-sign-{Guid.NewGuid():N}",
+        KeyId = pinnedKeyId ?? $"ssf-sign-{Guid.NewGuid():N}",
         Algorithm = SigningAlgorithms.RS256,
         Usage = PublicKeyUsages.Signature,
     }
