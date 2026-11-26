@@ -159,19 +159,22 @@ Assistant (`McpClientApp/Program.cs`, C# MCP SDK client):
 
 ## Layout
 
-- `ProviderApp/Program.cs`: the tenant, metadata documents, registration, client limits, sign-in and consent.
-- `ProviderApp/ConsentPageDecisions.cs`: the consent provider behind the consent page.
-- `ProviderApp/TestUserStore.cs`: the store of the demo employee.
-- `ProviderApp/appsettings.json`: issuer, secret encryption key, rate limit, the tracker's URI and scopes, allowed prefixes.
-- `McpServerApp/Program.cs`: `JwtBearer`, the MCP authentication scheme, scope policies, the gate, `MapMcp`.
-- `McpServerApp/TaskTools.cs`, `TaskTracker.cs`, `TrackedTask.cs`: tools and in-memory tasks.
-- `McpServerApp/TaskPolicies.cs`, `ToolPolicyAttribute.cs`, `ToolScopeGate.cs`: policies and the `403` gate.
-- `McpServerApp/ScopeChallengeHandler.cs`, `WhoAmITool.cs`: the challenge with `scope`, and the token echo tool.
-- `McpServerApp/appsettings.json`: resource URI, authorization server, scopes, seed tasks.
-- `McpClientApp/client-metadata.json`: the vendor's document.
-- `McpClientApp/Program.cs`, `ISignIn.cs`, `BrowserSignIn.cs`, `HeadlessSignIn.cs`: the assistant and its two ways to sign in.
-- `McpClientApp/appsettings.json`: tracker address, document, timeout, scopes, sign-in mode.
-- `*/Properties/launchSettings.json`: addresses and the Development environment.
+- `ProviderApp/`
+    - `Program.cs`: the tenant, metadata documents, registration, client limits, sign-in and consent.
+    - `ConsentPageDecisions.cs`: the consent provider behind the consent page.
+    - `TestUserStore.cs`: the store of the demo employee.
+    - `appsettings.json`: issuer, secret encryption key, rate limit, the tracker's URI and scopes, allowed prefixes.
+- `McpServerApp/`
+    - `Program.cs`: `JwtBearer`, the MCP authentication scheme, scope policies, the gate, `MapMcp`.
+    - `TaskTools.cs`, `TaskTracker.cs`, `TrackedTask.cs`: tools and in-memory tasks.
+    - `TaskPolicies.cs`, `ToolPolicyAttribute.cs`, `ToolScopeGate.cs`: policies and the `403` gate.
+    - `ScopeChallengeHandler.cs`, `WhoAmITool.cs`: the challenge with `scope`, and the token echo tool.
+    - `appsettings.json`: resource URI, authorization server, scopes, seed tasks.
+- `McpClientApp/`
+    - `client-metadata.json`: the vendor's document.
+    - `Program.cs`, `ISignIn.cs`, `BrowserSignIn.cs`, `HeadlessSignIn.cs`: the assistant and its two ways to sign in.
+    - `appsettings.json`: tracker address, document, timeout, scopes, sign-in mode.
+- `Properties/launchSettings.json` in each project: its address and the Development environment.
 
 ## The specifications behind this sample
 
