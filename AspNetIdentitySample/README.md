@@ -9,7 +9,7 @@ AspNetIdentitySample is OpenIDProviderApp taken one step toward production. It k
 - A React auth UI decoupled from the server's transport: the SignIn and SignUp screens are a React and Tailwind SPA that talks to the server only through the JSON auth API. The client's TypeScript types are generated from the server's OpenAPI document, so the two cannot drift. This sample wires the OIDC endpoints through the Minimal API adapter, `Abblix.Oidc.Server.MinimalApi` (`AddOidcServices` and `app.MapOidcEndpoints()`); the same React UI and JSON auth API would drop onto an MVC host unchanged, because they depend on the seam, not the transport.
 - A durable client store in the database (`DurableClientStore`, an `ITenantClientRegistrationStore`), so clients can be added or changed without a redeploy, and once Dynamic Client Registration is enabled, a client that registers itself survives a restart. The server's own client store still serves any client the tenant declares in its definition first, and keeps everything else in this store.
 - Signing keys persisted to SQLite, encrypted with Data Protection, so tokens issued before a restart keep validating afterwards.
-- Security-stamp validation: the stamp snapshotted at login is compared on every request, so a password change or an explicit stamp update ends existing sessions.
+- Security-stamp validation: the stamp snapshotted at login is compared on every request that carries the provider's session cookie, so a password change or an explicit stamp update ends the user's existing sessions at the provider. A demo page shows it happen; see Watching a session end below.
 
 The provider serves one tenant, `main`, whose issuer is `https://localhost:5001`. Every row in the OIDC store carries the tenant's id and generation, so the same tables would keep several tenants' keys and clients apart.
 
@@ -26,9 +26,23 @@ On first run it creates its SQLite databases (`users.db`, `oidc.db`) and seeds a
 
 If you ran a 2.x version of this sample before, delete `oidc.db` (with its `-shm` and `-wal` files) before the first run: the store's tables now carry the tenant's id and generation, `EnsureCreated` does not alter tables that already exist, and the old file stops the provider at startup with `no such column`. The next run creates a new signing key, so tokens issued by the old version stop validating. `users.db` is unchanged and can stay.
 
+## Watching a session end
+
+The sample has no password change screen, so a demo page stands in for one: `https://localhost:5001/Auth/Sessions` has a single button, End my sessions, which changes the security stamp of the account signed in at the provider in this browser. It acts on nobody else, and it posts through the same antiforgery check as the sign-in form. A real provider reaches the same `UpdateSecurityStampAsync` call from a password change or a "sign out everywhere" action.
+
+There is no validation interval to wait out. Identity's own `SecurityStampValidator` rechecks every 30 minutes; this sample compares the stamp on every request that carries the provider's session cookie, so the first such request after the change ends the session.
+
+- Sign in to TestClientApp as in Running it.
+- First the control. In the browser's developer tools, delete TestClientApp's cookie `__Host-TestClientApp` (stored for `https://localhost:5002`) and reload the client. You come back signed in without seeing a form: the client sent you to the provider, and the provider's session answered.
+- Open `https://localhost:5001/Auth/Sessions` and press End my sessions. The page answers `Your security stamp has changed.`
+- Reload TestClientApp. It still shows your claims, because that session is the client's own cookie and the provider has no channel to end it. The sample registers no back-channel logout.
+- Delete `__Host-TestClientApp` again and reload. This time the provider shows its sign-in form: the stamp in its session cookie no longer matches the account, so the session was rejected and removed. Sign in with the same email and password and you return to the client signed in. The new session carries the new stamp.
+
+To see the refusal on the demo page itself, reload `/Auth/Sessions` after pressing the button, then press it again. It answers `This browser holds no session at this provider.` Pressed again without the reload, it answers `Antiforgery validation failed`, because the page's antiforgery token was issued to the user who has just been signed out.
+
 ## Layout
 
-- `Program.cs`: Identity + EF wiring, the tenant definition, `AddConsentGrantedForEveryClient` (every client here is the provider's own), `AddOidcServices` with `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter.
+- `Program.cs`: Identity + EF wiring, the tenant definition, `AddConsentGrantedForEveryClient` (every client here is the provider's own), `AddOidcServices` with `app.MapOidcEndpoints()` for the OIDC protocol, the durable signing-key and client-store registrations, and the auth UI endpoints. `MapGet("/Auth/Login")` and `/Auth/Register` serve the React SPA and issue the antiforgery token it echoes back; `MapPost("/api/auth/login")` and `/api/auth/register` are the JSON auth API, guarded by an antiforgery endpoint filter. The demo-only `/Auth/Sessions` page and its `/api/auth/demo/end-my-sessions` POST change the signed-in user's security stamp.
 - `Models/AuthContracts.cs`: the request and response contracts for the JSON auth API.
 - `ClientApp/`: the React, TypeScript, Vite, and Tailwind auth SPA. `npm run gen:api` regenerates `src/api/schema.d.ts` from the server's OpenAPI document (refresh the snapshot with `curl -k https://localhost:5001/openapi/v1.json -o ClientApp/openapi.json` while the provider runs).
 - `IdentityUserInfoProvider.cs`: the subject-to-claims adapter over Identity.

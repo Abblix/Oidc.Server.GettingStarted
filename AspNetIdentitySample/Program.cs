@@ -287,6 +287,10 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/Auth/Login", ServeAuthSpa);
 app.MapGet("/Auth/Register", ServeAuthSpa);
 
+// DEMO ONLY: the page with the button that changes the signed-in user's security stamp, so the session end
+// described at AddCookie above can be watched without editing the database. See EndMySessionsAsync below.
+app.MapGet("/Auth/Sessions", ServeAuthSpa);
+
 // The JSON contract the SPA talks to. The group filter validates the antiforgery header on every POST.
 var authApi = app.MapGroup("/api/auth");
 authApi.AddEndpointFilter(ValidateAntiforgeryAsync);
@@ -295,6 +299,9 @@ authApi.MapPost("/login", LoginAsync)
     .ProducesValidationProblem();
 authApi.MapPost("/register", RegisterAsync)
     .Produces<AuthSuccessResponse>()
+    .ProducesValidationProblem();
+authApi.MapPost("/demo/end-my-sessions", EndMySessionsAsync)
+    .Produces(StatusCodes.Status204NoContent)
     .ProducesValidationProblem();
 
 app.Run();
@@ -411,6 +418,26 @@ static async Task<IResult> RegisterAsync(
     var redirectUrl = await SignInAndBuildResumeUrl(
         authService, sessionIdGenerator, userManager, clock, endpointResolver, user, request.RequestUri);
     return Results.Ok(new AuthSuccessResponse { RedirectUrl = redirectUrl });
+}
+
+// POST /api/auth/demo/end-my-sessions. DEMO ONLY, standing in for the password change or the "sign out
+// everywhere" a real account page offers: both end in UpdateSecurityStampAsync, and that call is the one
+// this sample checks for. It acts only on the account of the session this browser holds, found through the
+// library's own session cookie, never on a user named in the request, and it sits in the antiforgery group
+// like every other POST here. The new stamp no longer matches the snapshot in any session of this account,
+// this one included, so OnValidatePrincipal ends each of them the next time it is read.
+static async Task<IResult> EndMySessionsAsync(IAuthSessionService authService, UserManager<IdentityUser> userManager)
+{
+    var session = await authService.AuthenticateAsync();
+    var user = session is null ? null : await userManager.FindByIdAsync(session.Subject);
+    if (user is null)
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [string.Empty] = ["This browser holds no session at this provider."],
+        });
+
+    await userManager.UpdateSecurityStampAsync(user);
+    return Results.NoContent();
 }
 
 // Login and sign-up share their tail: establish the library session, then return the authorize URL that
