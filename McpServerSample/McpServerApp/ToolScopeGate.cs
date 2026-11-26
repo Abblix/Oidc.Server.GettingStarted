@@ -93,7 +93,7 @@ public sealed class ToolScopeGate(
                                               InvalidOperationException)
         {
             // No JSON content type, a charset no encoding answers to, a body that is not one JSON-RPC message, or
-            // tools/call parameters without a name
+            // tools/call parameters it cannot read
             return (false, null);
         }
         finally
