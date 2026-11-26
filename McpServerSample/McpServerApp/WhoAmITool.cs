@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 using ModelContextProtocol.Server;
 
 namespace McpServerApp;
@@ -13,7 +12,7 @@ namespace McpServerApp;
 public sealed class WhoAmITool
 {
     [McpServerTool(Name = "who_am_i"), Description("Returns the user, the client and the scope of the access token used for the call.")]
-    [Authorize(Policy = TaskPolicies.Read)]
+    [ToolPolicy(TaskPolicies.Read)]
     public static string WhoAmI(ClaimsPrincipal user)
         => $"subject={user.FindFirstValue("sub")}; client_id={user.FindFirstValue("client_id")}; scope={user.FindFirstValue("scope")}";
 }

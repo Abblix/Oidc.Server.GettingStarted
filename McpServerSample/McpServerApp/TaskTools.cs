@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -15,16 +14,16 @@ namespace McpServerApp;
 public sealed class TaskTools(TaskTracker tracker)
 {
     [McpServerTool(Name = "list_my_tasks", UseStructuredContent = true), Description("Lists the signed-in user's tasks.")]
-    [Authorize(Policy = TaskPolicies.Read)]
+    [ToolPolicy(TaskPolicies.Read)]
     public IReadOnlyList<TrackedTask> ListMyTasks(ClaimsPrincipal user) => tracker.ListFor(Subject(user));
 
     [McpServerTool(Name = "create_task", UseStructuredContent = true), Description("Creates a task in the signed-in user's list.")]
-    [Authorize(Policy = TaskPolicies.Write)]
+    [ToolPolicy(TaskPolicies.Write)]
     public TrackedTask CreateTask(ClaimsPrincipal user, [Description("What the task is about.")] string title)
         => tracker.Create(Subject(user), title);
 
     [McpServerTool(Name = "close_task", UseStructuredContent = true), Description("Closes one of the signed-in user's tasks.")]
-    [Authorize(Policy = TaskPolicies.Write)]
+    [ToolPolicy(TaskPolicies.Write)]
     public TrackedTask CloseTask(
         ClaimsPrincipal user,
         [Description("The id of the task, as list_my_tasks shows it.")] int id)

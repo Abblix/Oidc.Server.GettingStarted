@@ -19,8 +19,8 @@ namespace McpServerApp;
 /// which a client acting for a user answers by asking the user for that scope (step-up authorization). The SDK's own
 /// authorization filters refuse such a call inside the JSON-RPC response instead, which a client cannot step up from.
 /// The gate runs on the endpoint MapMcp maps it to, whatever path spelling routed there, reads the request the way the
-/// SDK reads it, and takes the policy each tool needs from the tool's [Authorize] attribute in the SDK's own registry.
-/// The SDK's filters stay on behind it.
+/// SDK reads it, and takes the policy each tool needs from the tool's <see cref="ToolPolicyAttribute"/> in the SDK's
+/// own registry. It is the only check of a tool's policy: the SDK's filters are off, so tools/list names every tool.
 /// </remarks>
 public sealed class ToolScopeGate(
     IReadOnlyDictionary<string, string> policyScopes,
@@ -39,7 +39,7 @@ public sealed class ToolScopeGate(
             await CalledToolAsync(context.Request) is { } tool &&
             serverOptions.Value.ToolCollection?.TryGetPrimitive(tool, out var serverTool) is true)
         {
-            foreach (var policy in serverTool.Metadata.OfType<AuthorizeAttribute>().Select(a => a.Policy).OfType<string>())
+            foreach (var policy in serverTool.Metadata.OfType<ToolPolicyAttribute>().Select(attribute => attribute.Policy))
             {
                 if ((await authorization.AuthorizeAsync(context.User, policy)).Succeeded)
                     continue;

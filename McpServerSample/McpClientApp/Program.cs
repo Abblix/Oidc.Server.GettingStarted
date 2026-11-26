@@ -150,12 +150,25 @@ try
         transport,
         new McpClientOptions { InitializationTimeout = signInTimeout },
         loggerFactory);
+
+    // An assistant offers its model the tools the server lists, so the tracker lists every tool whatever the token's
+    // scope, and a call the scope does not cover is what asks for more
+    var tools = await client.ListToolsAsync();
+    Console.WriteLine($"tools/list: {string.Join(", ", tools.Select(listed => listed.Name))}");
+
     async Task<CallToolResult> CallAsync(string tool, IReadOnlyDictionary<string, object?>? arguments = null)
     {
+        // A call refused for a scope the token lacks has the employee sign in again, and that wait is bounded as the
+        // first sign-in's is
+        using var signInWait = new CancellationTokenSource(signInTimeout);
         CallToolResult result;
         try
         {
-            result = await client.CallToolAsync(tool, arguments);
+            result = await client.CallToolAsync(tool, arguments, cancellationToken: signInWait.Token);
+        }
+        catch (OperationCanceledException) when (signInWait.IsCancellationRequested)
+        {
+            throw new TimeoutException();
         }
         catch (HttpRequestException exception) when (exception.StatusCode == System.Net.HttpStatusCode.Forbidden)
         {

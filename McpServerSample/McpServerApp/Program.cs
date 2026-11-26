@@ -110,9 +110,8 @@ builder.Services.AddSingleton(new TaskTracker(seedTasks));
 
 builder.Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
-    // Applies the [Authorize] policies on the tools: a tool whose policy fails is left out of tools/list, and a call
-    // to it is refused
-    .AddAuthorizationFilters()
+    // Without the SDK's authorization filters every tool is listed whatever the token's scope, and ToolScopeGate
+    // refuses a call the scope does not cover (ToolPolicyAttribute says why)
     .WithTools<TaskTools>()
     .WithTools<WhoAmITool>();
 
