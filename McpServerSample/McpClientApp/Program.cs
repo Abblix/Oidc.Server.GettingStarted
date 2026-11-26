@@ -112,8 +112,8 @@ var oauth = new ClientOAuthOptions
 
     // Known by its document, the assistant takes the scope the tracker names, tasks.read, and asks for tasks.write only
     // when a call needs it (step-up authorization). Kept to the configured scopes, a refusal for a missing scope is
-    // final: the SDK asks again only when that adds a scope, and here it cannot. Registering itself, it asks up front
-    // for the scopes it registers with.
+    // final after one more sign-in with the same scopes: the SDK always tries one step-up, and stops when the next refusal
+    // names no scope it has not asked for. Registering itself, it asks up front for the scopes it registers with.
     ScopeSelector = candidates => (requestedScopes, useMetadataDocument) switch
     {
         ({ } limit, _) => candidates?.Where(scope => limit.Contains(scope) || scope == "offline_access"),
