@@ -109,21 +109,9 @@ What comes back is the key's public description: its type, id, algorithm and int
 
 Read the `kid` from the JWK Set, restart `TransmitterApp`, and read it again. It changed, because the sample mints a key per run and mints the id with it. Revoke another session and it arrives: the receiver met a `kid` it did not hold, refetched the key set, and verified against the new key.
 
-Now pin the key id, the mistake this sample exists to warn against. `PinnedKeyId` is a demo-only setting, absent from `appsettings.json`: given on the command line, it makes every run sign under that one id instead of a fresh one. Keep the receiver running throughout, and stop the transmitter before each start below.
+That is why the transmitter mints a new key id with every new key. The receiver refetches the key set only for a key id it has not seen. A new key published under an id the receiver already holds is one it is confident it has, so it verifies against the old key and refuses every delivery with `invalid_key`. That names the symptom, not the cause: it is equally what a tampered payload or a wrong algorithm looks like.
 
-```shell
-dotnet run --project SharedSignalsSample/TransmitterApp -- --PinnedKeyId=ssf-sign-pinned
-```
-
-Revoke a session and it still arrives. The receiver has never seen `ssf-sign-pinned`, so it refetches the key set and takes the new key under that name. Now stop the transmitter and start it again with the same command: a new key, the same id. Revoke another session, and after the sweep the transmitter's log ends the delivery with `- 400` and a warning:
-
-```text
-The receiver refused 1 SET(s) on stream sample-stream and they are out of the queue: invalid_key - Invalid signature
-```
-
-`GET /revoked-sessions` on the receiver does not list the second session. `invalid_key` names the symptom, not the cause: it is equally what a tampered payload or a wrong algorithm looks like. The cause is that the receiver caches by key id, so a new key wearing the old name is one it is confident it already holds and never refetches on that signal. Start the transmitter without the setting and events arrive again, because the id is new.
-
-Leave the pinned transmitter running instead and it heals on its own, which is the confusing part. The cached set also has an ordinary lifetime, `JwksKeyResolutionOptions.CacheLifetime`, fifteen minutes by default, and when that expires the receiver refetches for its own reasons and picks up the new key under the pinned name. The outage lasts until then, and every event refused inside it is already gone.
+A transmitter that reuses an id this way heals on its own, which is the confusing part. The cached set also has an ordinary lifetime, `JwksKeyResolutionOptions.CacheLifetime`, fifteen minutes by default, and when that expires the receiver refetches for its own reasons and picks up the new key under the reused name. The outage lasts until then, and every event refused inside it is already gone.
 
 The lesson generalizes past this sample. A key id is not a label for the slot a key sits in; it is the name of that key, and it changes when the key does.
 
@@ -145,7 +133,7 @@ That refusal is the one that stops a genuine event addressed to somebody else. T
 
 ## Layout
 
-- `TransmitterApp/Program.cs`: the signing key and its `kid` (with the demo-only `PinnedKeyId`), the JWK Set endpoint, `AddSecurityEvents`, `AddSharedSignalsTransmitter` with the allowed receiver addresses, and the revoke endpoint with its single `DispatchAsync`.
+- `TransmitterApp/Program.cs`: the signing key and its `kid`, the JWK Set endpoint, `AddSecurityEvents`, `AddSharedSignalsTransmitter` with the allowed receiver addresses, and the revoke endpoint with its single `DispatchAsync`.
 - `TransmitterApp/appsettings.json`: the declared stream: which receiver, which events, which push endpoint.
 - `ReceiverApp/Program.cs`: key resolution, the validation options, the replay cache, and the push endpoint.
 - `ReceiverApp/appsettings.json`: the transmitter it trusts, the audience it expects, and the route it is pushed to.
