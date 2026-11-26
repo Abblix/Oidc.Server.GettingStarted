@@ -70,7 +70,8 @@ public sealed class ToolScopeGate(
 
     /// <summary>
     /// Whether the body is a JSON-RPC message, read as the SDK reads it, in the charset Content-Type names, with its
-    /// message types and serializer options; and the tool it names when it is a tools/call request.
+    /// message types and its protocol serializer options, which match property names case-sensitively as the SDK's
+    /// dispatch does; and the tool it names when it is a tools/call request.
     /// </summary>
     private static async Task<(bool Readable, string? Tool)> ReadCalledToolAsync(HttpRequest request)
     {
@@ -78,21 +79,21 @@ public sealed class ToolScopeGate(
         try
         {
             var message = await request.ReadFromJsonAsync<JsonRpcMessage>(
-                McpJsonUtilities.DefaultOptions, request.HttpContext.RequestAborted);
+                McpJsonUtilities.ProtocolOptions, request.HttpContext.RequestAborted);
 
             return message switch
             {
                 null => (false, null),
                 JsonRpcRequest { Method: RequestMethods.ToolsCall, Params: { } parameters } =>
-                    (true, parameters.Deserialize<CallToolRequestParams>(McpJsonUtilities.DefaultOptions)?.Name),
+                    (true, parameters.Deserialize<CallToolRequestParams>(McpJsonUtilities.ProtocolOptions)?.Name),
                 _ => (true, null),
             };
         }
         catch (Exception exception) when (exception is JsonException or ArgumentException or NotSupportedException or
                                               InvalidOperationException)
         {
-            // Not JSON, not a JSON-RPC message, a charset no encoding answers to, or tools/call parameters that are not
-            // an object
+            // No JSON content type, a charset no encoding answers to, a body that is not one JSON-RPC message, or
+            // tools/call parameters without a name
             return (false, null);
         }
         finally
