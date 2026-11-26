@@ -184,7 +184,6 @@ builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
 
-// #region registration-rate-limit
 // Registrations are counted per client address; every other OIDC endpoint passes unlimited. The registration endpoint
 // is recognised by the address the library publishes for it.
 builder.Services.AddRateLimiter(options =>
@@ -204,7 +203,6 @@ builder.Services.AddRateLimiter(options =>
             : RateLimitPartition.GetNoLimiter("");
     });
 });
-// #endregion
 
 var app = builder.Build();
 
@@ -223,12 +221,10 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 
-// #region rate-limit-endpoints
 // After routing, so the policy sees which endpoint a request reached
 app.UseRateLimiter();
 
 app.MapOidcEndpoints().RequireRateLimiting(RegistrationRateLimit);
-// #endregion
 
 app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
     Results.Content(LoginPage(antiforgery.GetAndStoreTokens(context), request_uri, error: null), "text/html"));
