@@ -143,7 +143,6 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         // Where the provider sends the user while ConsentPageDecisions holds the request's consent pending
         ConsentUri = new Uri("/Auth/Consent", UriKind.Relative),
 
-        // #region resource-definition
         // The task tracker's MCP server as a protected resource, with a scope for reading the employee's tasks and
         // one for changing them. A client naming it in the resource parameter gets an access token whose audience
         // is exactly this URI, which is what the MCP server checks. Registration accepts a scope a resource declares.
@@ -154,7 +153,6 @@ var oidcServer = builder.Services.AddOidcServices(options =>
                 new ScopeDefinition(readScope),
                 new ScopeDefinition(writeScope)),
         ],
-        // #endregion
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
 
