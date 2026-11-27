@@ -12,6 +12,8 @@ Here all three run on one machine: the provider on `https://localhost:5007`, the
 
 ## Run it
 
+With Docker and nothing else, see [Run it in Docker](#run-it-in-docker).
+
 You need the .NET 11 SDK and ports 5007-5010 free. From the repository root, trust the development certificate once (on Linux, check it with `dotnet dev-certs https --check --trust`: an untrusted one shows up as `invalid_client` or a `401`):
 
 ```shell
@@ -55,6 +57,28 @@ curl -k -i -X POST https://localhost:5008/mcp
 curl -k https://localhost:5008/.well-known/oauth-protected-resource/mcp
 curl -k https://localhost:5007/.well-known/oauth-authorization-server
 ```
+
+## Run it in Docker
+
+You need Docker and ports 5007 and 5010 free on this computer. From `McpServerSample`:
+
+```shell
+docker compose up --exit-code-from assistant
+```
+
+It builds one image with the three apps, starts the provider and the tracker, and runs the assistant with `--SignIn headless`, which answers the consent page with `allow`. The assistant's lines in the log are the ones the browser run prints: `Served the metadata document (Accept: application/json)`, the tools, `who_am_i: subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read`, the tasks, a second sign-in asking for `tasks.write`, `create_task`, `close_task` and the tasks again. Then the containers stop, and the command exits with the assistant's exit code, 0 when the scenario passed.
+
+To sign in and allow in your own browser:
+
+```shell
+docker compose --profile browser up --exit-code-from assistant-browser
+```
+
+The assistant prints the authorization URL in the log, as in [Run it](#run-it); open it on this computer. The browser warns once about the provider's certificate, which the image build issued and your computer does not trust; continue to the sign-in page. The redirect back to `http://127.0.0.1:5010/callback` reaches the assistant's container. `docker compose --profile browser down` removes the containers afterwards.
+
+The image build makes its own root certificate and, signed by it, one certificate for `localhost`, `127.0.0.1` and `::1`, which the three apps serve. They trust that root and no other, and nothing is installed or trusted on your computer. The root's private key stays in a build stage, outside the image the apps run from, and each new build of the image makes a new root.
+
+The tracker and the assistant join the provider's network namespace, so the three apps share one loopback interface and reach each other at the addresses they use under `dotnet run`. The issuer, the resource, the document URL and the redirect URI in the tokens and the metadata stay the same, and the provider fetches the document under `AllowLoopback`, which the library applies only in Development and with an issuer on loopback. `SecureHttpFetchOptions.AllowedDestinations` could not stand in for it: the library never fetches a client identifier from a destination listed there. The provider publishes ports 5007 and 5010 on this computer's loopback alone; only the browser run uses them.
 
 ## How a client becomes known
 
@@ -174,6 +198,7 @@ Assistant (`McpClientApp/Program.cs`, C# MCP SDK client):
     - `client-metadata.json`: the vendor's document.
     - `Program.cs`, `ISignIn.cs`, `BrowserSignIn.cs`, `HeadlessSignIn.cs`: the assistant and its two ways to sign in.
     - `appsettings.json`: tracker address, document, timeout, scopes, sign-in mode.
+- `Dockerfile`, `compose.yaml`, `.env`: the image, the services and the default profile of [Run it in Docker](#run-it-in-docker).
 - `Properties/launchSettings.json` in each project: its address and the Development environment.
 
 ## The specifications behind this sample

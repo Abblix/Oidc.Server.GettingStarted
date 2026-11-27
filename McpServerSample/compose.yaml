@@ -1,0 +1,78 @@
+# The three apps of the sample in containers, with Docker as the only thing the host needs.
+#   docker compose up --exit-code-from assistant                             the scenario without a browser, its result in the log
+#   docker compose --profile browser up --exit-code-from assistant-browser   the same with the sign-in and consent in the host's browser
+# The default profile comes from .env next to this file; --profile replaces it.
+#
+# The tracker and the assistant join the provider's network namespace, so the three share one loopback interface
+# and call each other at the same localhost addresses as under dotnet run. The issuer, the resource, the metadata
+# document and the redirect URI stay as the apps' own settings name them, and the provider fetches the document from
+# loopback by ClientIdMetadataDocumentAddresses.AllowLoopback, as on a developer's machine.
+
+# One image for the three apps, built by the provider service alone, so they serve and trust one root
+x-app: &app
+  image: mcp-server-sample
+  pull_policy: never
+  environment:
+    ASPNETCORE_ENVIRONMENT: Development
+
+services:
+  provider:
+    <<: *app
+    build: .
+    working_dir: /app/ProviderApp
+    command: [ "dotnet", "ProviderApp.dll" ]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # On every interface of the namespace, so the port published below reaches it; the issuer stays localhost
+      ASPNETCORE_URLS: https://+:5007
+    # The namespace's ports, published on the host's loopback alone: the provider's pages and the assistant's redirect
+    # URI, which only the browser profile uses. A service joining this namespace cannot publish ports of its own.
+    ports:
+      - "127.0.0.1:5007:5007"
+      - "127.0.0.1:5010:5010"
+    healthcheck: &listening
+      test: [ "CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5007" ]
+      interval: 2s
+      retries: 30
+
+  tracker:
+    <<: *app
+    network_mode: service:provider
+    working_dir: /app/McpServerApp
+    command: [ "dotnet", "McpServerApp.dll" ]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: https://localhost:5008
+    healthcheck:
+      <<: *listening
+      test: [ "CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5008" ]
+    depends_on:
+      provider:
+        condition: service_healthy
+
+  # Signs in without a browser, as --SignIn headless does, and exits with the scenario's result
+  assistant:
+    <<: *app
+    profiles: [ headless ]
+    network_mode: service:provider
+    working_dir: /app/McpClientApp
+    command: [ "dotnet", "McpClientApp.dll", "--SignIn", "headless", "--HeadlessSignIn:Consent", "allow" ]
+    depends_on: &ready
+      provider:
+        condition: service_healthy
+      tracker:
+        condition: service_healthy
+
+  # Prints the authorization URL for the host's browser and receives its redirect through the published port 5010
+  assistant-browser:
+    <<: *app
+    profiles: [ browser ]
+    network_mode: service:provider
+    working_dir: /app/McpClientApp
+    command: [ "dotnet", "McpClientApp.dll", "--SignIn", "browser" ]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # The addresses the app takes from its document, the redirect on every interface so the published port reaches it
+      Kestrel__Endpoints__Document__Url: https://localhost:5009
+      Kestrel__Endpoints__Redirect__Url: http://+:5010
+    depends_on: *ready
