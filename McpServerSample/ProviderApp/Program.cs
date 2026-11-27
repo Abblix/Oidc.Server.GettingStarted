@@ -84,12 +84,12 @@ builder.Services.AddSingleton<IUserConsentsProvider>(services => services.GetReq
 
 var oidcServer = builder.Services.AddOidcServices(options =>
 {
-    // #region new-client-options
     // MCP clients have no relationship with this provider before they connect, so a client without a metadata
     // document registers itself (RFC 7591). Registration without an initial access token is what lets it do that
     // unattended; the library's default asks for one.
     options.RequireInitialAccessToken = false;
 
+    // #region new-client-options
     options.NewClientOptions = new NewClientOptions
     {
         // These are the library's defaults, written out so the sample shows the policy: an MCP client acts for a user
@@ -97,10 +97,9 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         // client_credentials included (a token for the MCP server with no user behind it), is refused.
         AllowedGrantTypes = [GrantTypes.AuthorizationCode, GrantTypes.RefreshToken],
 
-        // An MCP client asks for offline_access to keep working after its access token expires, usually without
-        // prompt=consent, and a request without it has that scope ignored (OpenID Connect Core 1.0 section 11). This
-        // provider states for every client that registers that the user's consent, which the consent provider above
-        // reports, is enough, so the client gets its refresh token.
+        // Allowed gives MCP clients a refresh token without prompt=consent: they ask for offline_access without it,
+        // and by default (ConsentRequired) such a request gets none (OpenID Connect Core 1.0, section 11). The user's
+        // answer on the consent page stands in for prompt=consent, so the assistant keeps working after its access token expires.
         OfflineAccess = OfflineAccess.Allowed,
 
         // A client that registers itself may get a token for the task tracker and nothing else this provider
@@ -143,7 +142,6 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         // Where the provider sends the user while ConsentPageDecisions holds the request's consent pending
         ConsentUri = new Uri("/Auth/Consent", UriKind.Relative),
 
-        // #region resource-definition
         // The task tracker's MCP server as a protected resource, with a scope for reading the employee's tasks and
         // one for changing them. A client naming it in the resource parameter gets an access token whose audience
         // is exactly this URI, which is what the MCP server checks. Registration accepts a scope a resource declares.
@@ -154,7 +152,6 @@ var oidcServer = builder.Services.AddOidcServices(options =>
                 new ScopeDefinition(readScope),
                 new ScopeDefinition(writeScope)),
         ],
-        // #endregion
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
 

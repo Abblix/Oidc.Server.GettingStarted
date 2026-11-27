@@ -109,9 +109,9 @@ What comes back is the key's public description: its type, id, algorithm and int
 
 Read the `kid` from the JWK Set, restart `TransmitterApp`, and read it again. It changed, because the sample mints a key per run and mints the id with it. Revoke another session and it arrives: the receiver met a `kid` it did not hold, refetched the key set, and verified against the new key.
 
-Now fix `KeyId` to a constant and restart again. Deliveries start failing, and the transmitter's log names the verdict `invalid_key`. That names the symptom, not the cause: it is equally what a tampered payload or a wrong algorithm looks like. The cause is that the receiver caches by key id, so a new key wearing the old name is one it is confident it already holds and never refetches on that signal.
+That is why the transmitter mints a new key id with every new key. The receiver refetches the key set only for a key id it has not seen. A new key published under an id the receiver already holds is one it is confident it has, so it verifies against the old key and refuses every delivery with `invalid_key`. That names the symptom, not the cause: it is equally what a tampered payload or a wrong algorithm looks like.
 
-Leave it running and it heals on its own, which is the confusing part. The cached set also has an ordinary lifetime, `JwksKeyResolutionOptions.CacheLifetime`, fifteen minutes by default, and when that expires the receiver refetches for its own reasons and picks up the new key under the pinned name. The outage lasts until then, and every event refused inside it is already gone.
+A transmitter that reuses an id this way heals on its own, which is the confusing part. The cached set also has an ordinary lifetime, `JwksKeyResolutionOptions.CacheLifetime`, fifteen minutes by default, and when that expires the receiver refetches for its own reasons and picks up the new key under the reused name. The outage lasts until then, and every event refused inside it is already gone.
 
 The lesson generalizes past this sample. A key id is not a label for the slot a key sits in; it is the name of that key, and it changes when the key does.
 

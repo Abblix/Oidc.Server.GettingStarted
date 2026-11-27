@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import SignIn from './components/SignIn';
 import SignUp from './components/SignUp';
+import EndSessions from './components/EndSessions';
 
-type Screen = 'signin' | 'signup';
+type Screen = 'signin' | 'signup' | 'sessions';
 
 function screenFromPath(): Screen {
-  return window.location.pathname.toLowerCase().includes('/register') ? 'signup' : 'signin';
+  const path = window.location.pathname.toLowerCase();
+  if (path.includes('/register')) return 'signup';
+  if (path.includes('/sessions')) return 'sessions';
+  return 'signin';
 }
 
 function requestUriFromQuery(): string {
@@ -29,11 +33,9 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-slate-100 p-4 dark:bg-slate-950">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        {screen === 'signin' ? (
-          <SignIn requestUri={requestUri} onSwitch={() => switchTo('signup')} />
-        ) : (
-          <SignUp requestUri={requestUri} onSwitch={() => switchTo('signin')} />
-        )}
+        {screen === 'sessions' && <EndSessions />}
+        {screen === 'signin' && <SignIn requestUri={requestUri} onSwitch={() => switchTo('signup')} />}
+        {screen === 'signup' && <SignUp requestUri={requestUri} onSwitch={() => switchTo('signin')} />}
       </div>
       <p className="text-xs text-slate-400 dark:text-slate-600">
         Powered by{' '}

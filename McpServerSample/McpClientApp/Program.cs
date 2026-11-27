@@ -112,8 +112,8 @@ var oauth = new ClientOAuthOptions
 
     // Known by its document, the assistant takes the scope the tracker names, tasks.read, and asks for tasks.write only
     // when a call needs it (step-up authorization). Kept to the configured scopes, a refusal for a missing scope is
-    // final: the SDK asks again only when that adds a scope, and here it cannot. Registering itself, it asks up front
-    // for the scopes it registers with.
+    // final after one more sign-in with the same scopes: the SDK always tries one step-up, and stops when the next refusal
+    // names no scope it has not asked for. Registering itself, it asks up front for the scopes it registers with.
     ScopeSelector = candidates => (requestedScopes, useMetadataDocument) switch
     {
         ({ } limit, _) => candidates?.Where(scope => limit.Contains(scope) || scope == "offline_access"),
@@ -150,12 +150,25 @@ try
         transport,
         new McpClientOptions { InitializationTimeout = signInTimeout },
         loggerFactory);
+
+    // An assistant offers its model the tools the server lists, so the tracker lists every tool whatever the token's
+    // scope, and a call the scope does not cover is what asks for more
+    var tools = await client.ListToolsAsync();
+    Console.WriteLine($"tools/list: {string.Join(", ", tools.Select(listed => listed.Name))}");
+
     async Task<CallToolResult> CallAsync(string tool, IReadOnlyDictionary<string, object?>? arguments = null)
     {
+        // A call refused for a scope the token lacks has the employee sign in again, and that wait is bounded as the
+        // first sign-in's is
+        using var signInWait = new CancellationTokenSource(signInTimeout);
         CallToolResult result;
         try
         {
-            result = await client.CallToolAsync(tool, arguments);
+            result = await client.CallToolAsync(tool, arguments, cancellationToken: signInWait.Token);
+        }
+        catch (OperationCanceledException) when (signInWait.IsCancellationRequested)
+        {
+            throw new TimeoutException();
         }
         catch (HttpRequestException exception) when (exception.StatusCode == System.Net.HttpStatusCode.Forbidden)
         {

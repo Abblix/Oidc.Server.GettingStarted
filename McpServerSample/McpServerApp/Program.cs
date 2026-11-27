@@ -30,7 +30,6 @@ var authentication = builder.Services.AddAuthentication(options =>
     options.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme;
 });
 
-// #region jwt-bearer
 authentication.AddJwtBearer(options =>
 {
     // The signing keys and the issuer come from the provider's metadata
@@ -41,9 +40,9 @@ authentication.AddJwtBearer(options =>
     // token issued for any other resource, or for none, is refused here.
     options.Audience = resource.OriginalString;
 
-    // The provider gives a refresh token the same audience and signing key as the access token, so only the
-    // JWT type tells them apart. Without this the MCP server would take a refresh token as a bearer token,
-    // and the specification says MCP servers "MUST NOT accept or transit any other tokens".
+    // A refresh token of this provider is addressed to the issuer, so the audience check already refuses one; the
+    // type check keeps that true whatever audience a token carries, and the MCP specification says servers
+    // "MUST NOT accept or transit any other tokens".
     options.TokenValidationParameters.ValidTypes = ["at+jwt"];
 
     // Keep the claims under their JWT names (sub, scope) rather than the mapped .NET claim types
@@ -65,7 +64,6 @@ authentication.AddJwtBearer(options =>
         },
     };
 });
-// #endregion
 
 authentication.AddScheme<McpAuthenticationOptions, ScopeChallengeHandler>(
     McpAuthenticationDefaults.AuthenticationScheme,
@@ -110,9 +108,8 @@ builder.Services.AddSingleton(new TaskTracker(seedTasks));
 
 builder.Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
-    // Applies the [Authorize] policies on the tools: a tool whose policy fails is left out of tools/list, and a call
-    // to it is refused
-    .AddAuthorizationFilters()
+    // Without the SDK's authorization filters every tool is listed whatever the token's scope, and ToolScopeGate
+    // refuses a call the scope does not cover (ToolPolicyAttribute says why)
     .WithTools<TaskTools>()
     .WithTools<WhoAmITool>();
 
