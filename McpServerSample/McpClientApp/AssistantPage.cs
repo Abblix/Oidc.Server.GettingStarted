@@ -208,15 +208,16 @@ public sealed class AssistantPage(
             => "the tracker refused the provider's token (401). If the provider was restarted, restart the tracker " +
                "too, so it fetches the provider's new signing keys.",
 
-        // The tracker's 403 for a scope the employee did not grant, once the SDK found no scope to step up to
-        HttpRequestException or McpException when traffic.RefusedScope is { } scope && signedInAgain
-            => $"{trackerName} refused: the token lacks {scope}",
-
-        // The SDK tries one step-up per connection: once it has asked for a scope, a later refusal for the same scope
-        // fails at once, even when that sign-in was cancelled or denied, and only a new connection asks again
-        HttpRequestException or McpException when traffic.RefusedScope is { } scope
+        // The SDK tries one step-up per connection: once it has asked the provider for a scope, a later refusal for
+        // that scope fails at once, even when that sign-in was cancelled or denied, and only a new connection asks again
+        HttpRequestException or McpException
+            when traffic.RefusedScope is { } scope && !signedInAgain && signIn.HasAsked(scope)
             => $"{trackerName} refused: the token lacks {scope}. The assistant has already asked for it once since " +
                "signing in; Sign in again to ask anew.",
+
+        // The tracker's 403 for a scope the employee did not grant, or the assistant does not ask for (Scopes)
+        HttpRequestException or McpException when traffic.RefusedScope is { } scope
+            => $"{trackerName} refused: the token lacks {scope}",
         _ => exception.Message,
     };
 
@@ -234,6 +235,7 @@ public sealed class AssistantPage(
 
         log.Add($"Connecting to {trackerName} at {tracker}");
         _tokens = new LoggedTokenCache(log);
+        signIn.ForgetAskedScopes();
         _transport = createTransport(_tokens);
 
         // The connection is initialized only after the employee has signed in, so the SDK's wait for it, a minute by
@@ -290,7 +292,8 @@ public sealed class AssistantPage(
             _last = (call, result, failed);
     }
 
-    private static async Task<bool> IsFromThisPageAsync(HttpContext context, IAntiforgery antiforgery)
+    // The framework's own antiforgery log is off (appsettings.json), so a refused form is written here
+    private async Task<bool> IsFromThisPageAsync(HttpContext context, IAntiforgery antiforgery)
     {
         try
         {
@@ -299,6 +302,7 @@ public sealed class AssistantPage(
         }
         catch (AntiforgeryValidationException)
         {
+            log.Add($"Refused a form posted to {context.Request.Path} without a valid antiforgery token of this page");
             return false;
         }
     }
@@ -336,7 +340,7 @@ public sealed class AssistantPage(
                 : $"<p>{Encode(trackerName)} refused: the token lacks {Encode(refused)}.</p>");
             body.Append($"<p>The assistant asks the provider for: <code>{Encode(asked)}</code></p>");
             body.Append($"<p><a class=\"button\" href=\"{Encode(pending.ToString())}\">" +
-                        (refused is not null && asked.Split(' ').Contains(refused)
+                        (refused is not null && signIn.HasAsked(refused)
                             ? $"Allow {Encode(refused)}"
                             : "Continue to the provider") +
                         "</a></p>");

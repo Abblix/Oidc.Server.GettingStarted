@@ -1,3 +1,4 @@
+using System.Web;
 using ModelContextProtocol.Authentication;
 
 namespace McpClientApp;
@@ -12,6 +13,7 @@ public sealed class BrowserSignIn(StepLog log) : ISignIn
     private readonly Lock _lock = new();
     private TaskCompletionSource<AuthorizationResult>? _response;
     private TaskCompletionSource _requested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly HashSet<string> _askedScopes = [];
 
     /// <summary>
     /// The authorization URL of the sign-in waiting for the browser, or none.
@@ -41,6 +43,8 @@ public sealed class BrowserSignIn(StepLog log) : ISignIn
         {
             _response = response;
             PendingUri = context.AuthorizationUri;
+            var scope = HttpUtility.ParseQueryString(context.AuthorizationUri.Query)["scope"] ?? "";
+            _askedScopes.UnionWith(scope.Split(' ', StringSplitOptions.RemoveEmptyEntries));
             requested = _requested;
             _requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
@@ -62,6 +66,25 @@ public sealed class BrowserSignIn(StepLog log) : ISignIn
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Whether a sign-in since <see cref="ForgetAskedScopes"/> asked the provider for <paramref name="scope"/>, whatever
+    /// the employee answered.
+    /// </summary>
+    public bool HasAsked(string scope)
+    {
+        lock (_lock)
+            return _askedScopes.Contains(scope);
+    }
+
+    /// <summary>
+    /// Starts counting the scopes asked for afresh, as a new connection's SDK does.
+    /// </summary>
+    public void ForgetAskedScopes()
+    {
+        lock (_lock)
+            _askedScopes.Clear();
     }
 
     /// <summary>
