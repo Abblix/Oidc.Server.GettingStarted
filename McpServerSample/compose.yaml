@@ -1,4 +1,4 @@
-# The three apps of the sample in containers, with Docker as the only thing the host needs.
+# The three apps of the sample in containers; the host needs Docker and its exported development certificate.
 #   docker compose up                                                              the assistant's page on http://127.0.0.1:5010/, signing in through the host's browser
 #   docker compose --profile headless up --exit-code-from mcp-client-app-headless  the same without a browser, its result in the log
 # The default profile comes from .env next to this file; --profile replaces it.

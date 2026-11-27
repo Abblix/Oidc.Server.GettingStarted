@@ -26,7 +26,10 @@ Three apps, one machine:
   dotnet dev-certs https --trust
   ```
 
+  On Linux, also add `$HOME/.aspnet/dev-certs/trust` to `SSL_CERT_DIR`, as that command explains.
+
 - Docker with Compose, to run the apps in containers. Without it, see [Run it with the .NET SDK](#run-it-with-the-net-sdk).
+- For the agents, Node.js 22.15 or later with npm.
 - For [Connect Codex](#connect-codex): Codex CLI 0.172 or later, signed in to your OpenAI account:
 
   ```shell
