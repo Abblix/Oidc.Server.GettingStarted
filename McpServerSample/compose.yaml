@@ -8,7 +8,8 @@
 # document and the redirect URI stay as the apps' own settings name them, and the provider fetches the document from
 # loopback by ClientIdMetadataDocumentAddresses.AllowLoopback, as on a developer's machine.
 
-# One image for the three apps, built by the provider service alone, so they serve and trust one certificate
+# One image for the three apps, built by the provider service alone. Each app serves and trusts the host's ASP.NET Core
+# development certificate, exported to certificate/ next to this file before the first run.
 # Data Protection keeps its keys unencrypted, and in the container unless a volume holds them, and warns of both. That
 # is what a development run wants, so every service turns those warnings off; the provider keeps its keys in a volume.
 x-app: &app
@@ -17,13 +18,25 @@ x-app: &app
   environment:
     ASPNETCORE_ENVIRONMENT: Development
     Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
+  volumes:
+    - &certificate ./certificate:/etc/mcp-sample/certificate:ro
 
 services:
   provider-app:
     <<: *app
     build: .
     working_dir: /app/ProviderApp
-    command: [ "dotnet", "ProviderApp.dll" ]
+    # Starts only once certificate/ holds the certificate, readable by the apps' user, and otherwise prints the command
+    # that exports it; the others wait for the provider, so the run stops there
+    command:
+      - bash
+      - -c
+      - >-
+        test -r /etc/mcp-sample/certificate/localhost.crt && test -r /etc/mcp-sample/certificate/localhost.key
+        || { echo 'No readable certificate/localhost.crt and localhost.key next to compose.yaml; from that folder run:
+        dotnet dev-certs https --export-path certificate/localhost.crt --format PEM --no-password
+        (on Linux and macOS add: chmod a+r certificate/*)'; exit 1; };
+        exec dotnet ProviderApp.dll
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
@@ -32,11 +45,14 @@ services:
     # The provider's Data Protection keys outlive its container, so a browser's antiforgery cookie from an earlier run
     # still decrypts; docker compose down -v removes them
     volumes:
+      - *certificate
       - provider-keys:/home/app/.aspnet/DataProtection-Keys
-    # The namespace's ports, published on the host's loopback alone: the provider's pages and the assistant's redirect
-    # URI, which only the browser profile uses. A service joining this namespace cannot publish ports of its own.
+    # The namespace's ports, published on the host's loopback alone: the provider, the tracker for an agent running on
+    # the host, and the assistant's page and redirect URI, which only the browser profile uses. A service joining this
+    # namespace cannot publish ports of its own.
     ports:
       - "127.0.0.1:5007:5007"
+      - "127.0.0.1:5008:5008"
       - "127.0.0.1:5010:5010"
     healthcheck: &listening
       test: [ "CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5007" ]
@@ -51,7 +67,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
-      ASPNETCORE_URLS: https://localhost:5008
+      # On every interface of the namespace, so the port published above reaches it; the resource stays localhost
+      ASPNETCORE_URLS: https://+:5008
     healthcheck:
       <<: *listening
       test: [ "CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5008" ]

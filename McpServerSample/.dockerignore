@@ -1,3 +1,6 @@
 # Build outputs of a local dotnet run: a restore made on the host breaks the restore inside the image
 **/bin/
 **/obj/
+
+# The host's development certificate exported for the containers, with its private key
+certificate/
