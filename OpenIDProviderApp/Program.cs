@@ -61,9 +61,6 @@ builder.Services
     .AddAuthentication()
     .AddCookie();
 
-builder.Services
-    .AddDistributedMemoryCache();
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

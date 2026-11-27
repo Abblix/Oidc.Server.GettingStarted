@@ -33,7 +33,9 @@ function normalise(errors: Record<string, string[]> | undefined): FieldErrors {
   return result;
 }
 
-async function post<TBody>(url: string, body: TBody): Promise<AuthSuccessResponse> {
+// Every POST of the auth API: the antiforgery header on the way out, a 400 turned into ValidationError on
+// the way back. The caller reads the body of a successful response, if it has one.
+async function send<TBody>(url: string, body: TBody): Promise<Response> {
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'same-origin',
@@ -44,7 +46,7 @@ async function post<TBody>(url: string, body: TBody): Promise<AuthSuccessRespons
     body: JSON.stringify(body),
   });
 
-  if (response.ok) return (await response.json()) as AuthSuccessResponse;
+  if (response.ok) return response;
 
   if (response.status === 400) {
     const problem = (await response.json()) as { errors?: Record<string, string[]> };
@@ -54,5 +56,14 @@ async function post<TBody>(url: string, body: TBody): Promise<AuthSuccessRespons
   throw new Error(`Request failed with status ${response.status}`);
 }
 
+async function post<TBody>(url: string, body: TBody): Promise<AuthSuccessResponse> {
+  return (await (await send(url, body)).json()) as AuthSuccessResponse;
+}
+
 export const signIn = (body: LoginRequest): Promise<AuthSuccessResponse> => post('/api/auth/login', body);
 export const signUp = (body: RegisterRequest): Promise<AuthSuccessResponse> => post('/api/auth/register', body);
+
+// DEMO ONLY: changes the signed-in user's security stamp (see EndSessions). Answers 204 with no body.
+export const endMySessions = async (): Promise<void> => {
+  await send('/api/auth/demo/end-my-sessions', {});
+};

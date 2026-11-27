@@ -21,10 +21,6 @@ builder.Services.AddScoped<IUserInfoProvider, NoUserInfoProvider>();
 // to ask, and the only client is this sample's own, so granting every client what it asks for is the choice.
 builder.Services.AddConsentGrantedForEveryClient();
 
-// The library caches fetched public keys in IMemoryCache and backs its stores with the distributed cache.
-builder.Services.AddMemoryCache();
-builder.Services.AddDistributedMemoryCache();
-
 // Every value the sample cannot invent carries no default here: a default in code for the client secret's hash
 // would be credential material in code, and a default for a name or a URL is a second copy of a line
 // appsettings.json already holds. `required` says nothing about that: the binder ignores it, so which settings a

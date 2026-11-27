@@ -14,6 +14,7 @@ using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
 using Abblix.Oidc.Server.Features.RandomGenerators;
+using Abblix.Oidc.Server.Features.SecureHttpFetch;
 using Abblix.Oidc.Server.Features.UserAuthentication;
 using Abblix.Oidc.Server.Features.UserInfo;
 using Abblix.Oidc.Server.MinimalApi;
@@ -57,7 +58,6 @@ builder.Services.AddScoped<IUserInfoProvider, IdentityUserInfoProvider>();
 // A Minimal API host has no MVC, so the services the request pipeline and the auth UI rely on are
 // registered directly (the MVC host got these transitively from AddControllersWithViews).
 builder.Services.AddAuthorization();
-builder.Services.AddMemoryCache();
 
 // The React auth SPA posts JSON and echoes the antiforgery request token in this header; the auth
 // endpoints validate it against the paired HttpOnly cookie.
@@ -104,6 +104,17 @@ builder.Services.AddOidcServices(options => options.Tenants.Add(tenant));
 // A client authenticates to it with its own credentials, as requests.http does with console_client.
 builder.Services.AddIntrospection();
 
+// Back-channel logout (OpenID Connect Back-Channel Logout 1.0) is opt-in too: with it, a session that ends here
+// sends a logout token to each client signed in to it that registered a back-channel logout URI, and discovery
+// advertises the channel. TestClientApp, seeded below, registers this one.
+builder.Services.AddBackChannelLogout();
+var testClientBackChannelLogoutUri = new Uri("https://localhost:5002/signout-backchannel", UriKind.Absolute);
+
+// A logout token is POSTed to an address the client chose, so the server refuses addresses inside its own network,
+// localhost among them, as it refuses every other client-supplied address there. Naming this one destination
+// exempts it alone; BlockPrivateNetworks = false would exempt every address a client registers.
+builder.Services.Configure<SecureHttpFetchOptions>(options => options.AllowedDestinations = [testClientBackChannelLogoutUri]);
+
 // Durable OIDC state (signing keys and client registrations) lives in SQLite so a restart neither
 // invalidates issued tokens nor forgets registered clients. The providers below are singletons, so
 // they open a context per call through IDbContextFactory rather than holding a scoped DbContext.
@@ -149,16 +160,20 @@ builder.Services
             var user = subject is null ? null : await userManager.FindByIdAsync(subject);
             var snapshot = context.Principal?.FindFirstValue("security_stamp");
 
+            // Read before RejectPrincipal, which clears the principal.
+            var sessionId = context.Principal?.FindFirstValue("sid");
+
             if (user is null || await userManager.GetSecurityStampAsync(user) != snapshot)
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(context.Scheme.Name);
+
+                // The cookie is gone from this browser; the clients signed in through this session are told too.
+                if (subject is not null && sessionId is not null)
+                    await EndSessionForItsClientsAsync(context.HttpContext.RequestServices, sessionId, subject);
             }
         };
     });
-
-builder.Services
-    .AddDistributedMemoryCache();
 
 var app = builder.Build();
 
@@ -212,14 +227,16 @@ using (var scope = app.Services.CreateScope())
     // registration would be.
     var clients = scope.ServiceProvider.GetRequiredService<IClientInfoManager>();
     var tokenIds = scope.ServiceProvider.GetRequiredService<ITokenIdGenerator>();
-    foreach (var (clientId, port, claimsInIdentityToken) in new[]
+    foreach (var (clientId, port, claimsInIdentityToken, backChannelLogoutUri) in new (string, int, bool, Uri?)[]
              {
                  // TestClientApp and BffSample ask for a token addressed to the API, which the
                  // userinfo endpoint then refuses, so their profile claims travel in the ID token.
-                 ("test_client", 5002, true),
-                 ("bff_sample", 5003, true),
+                 // TestClientApp also takes back-channel logout, so a session this provider ends is
+                 // ended there too (see EndSessionForItsClientsAsync).
+                 ("test_client", 5002, true, testClientBackChannelLogoutUri),
+                 ("bff_sample", 5003, true, null),
 
-                 ("blazor_sample", 5005, false),
+                 ("blazor_sample", 5005, false, null),
              })
     {
         // A registration holds the identifier of the registration access token that manages it. No token
@@ -235,6 +252,12 @@ using (var scope = app.Services.CreateScope())
             RedirectUris = [new Uri($"https://localhost:{port}/signin-oidc", UriKind.Absolute)],
             PostLogoutRedirectUris = [new Uri($"https://localhost:{port}/signout-callback-oidc", UriKind.Absolute)],
             ForceUserClaimsInIdentityToken = claimsInIdentityToken,
+
+            // Session required: the logout token then names the session (sid), and the ID token carries the
+            // same sid, which is how the client finds the one sign-in of its own to end.
+            BackChannelLogout = backChannelLogoutUri is null
+                ? null
+                : new BackChannelLogoutOptions(backChannelLogoutUri, RequiresSessionId: true),
         };
 
         await clients.TryAddClientAsync(tenant, new RegisteredClient(client, tokenIds.GenerateTokenId()));
@@ -291,6 +314,10 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/Auth/Login", ServeAuthSpa);
 app.MapGet("/Auth/Register", ServeAuthSpa);
 
+// DEMO ONLY: the page with the button that changes the signed-in user's security stamp, so the session end
+// described at AddCookie above can be watched without editing the database. See EndMySessionsAsync below.
+app.MapGet("/Auth/Sessions", ServeAuthSpa);
+
 // The JSON contract the SPA talks to. The group filter validates the antiforgery header on every POST.
 var authApi = app.MapGroup("/api/auth");
 authApi.AddEndpointFilter(ValidateAntiforgeryAsync);
@@ -299,6 +326,9 @@ authApi.MapPost("/login", LoginAsync)
     .ProducesValidationProblem();
 authApi.MapPost("/register", RegisterAsync)
     .Produces<AuthSuccessResponse>()
+    .ProducesValidationProblem();
+authApi.MapPost("/demo/end-my-sessions", EndMySessionsAsync)
+    .Produces(StatusCodes.Status204NoContent)
     .ProducesValidationProblem();
 
 app.Run();
@@ -415,6 +445,44 @@ static async Task<IResult> RegisterAsync(
     var redirectUrl = await SignInAndBuildResumeUrl(
         authService, sessionIdGenerator, userManager, clock, endpointResolver, user, request.RequestUri);
     return Results.Ok(new AuthSuccessResponse { RedirectUrl = redirectUrl });
+}
+
+// POST /api/auth/demo/end-my-sessions. DEMO ONLY, standing in for the password change or the "sign out
+// everywhere" a real account page offers: both end in UpdateSecurityStampAsync, and that call is the one
+// this sample checks for. It acts only on the account of the session this browser holds, found through the
+// library's own session cookie, never on a user named in the request, and it sits in the antiforgery group
+// like every other POST here. This browser's session is ended at once, its clients told through
+// back-channel logout. The account's sessions in other browsers no longer match the new stamp, so
+// OnValidatePrincipal ends each of them, and tells its clients, the next time that browser reaches the provider.
+static async Task<IResult> EndMySessionsAsync(
+    IAuthSessionService authService,
+    UserManager<IdentityUser> userManager,
+    IServiceProvider services)
+{
+    var session = await authService.AuthenticateAsync();
+    var user = session is null ? null : await userManager.FindByIdAsync(session.Subject);
+    if (user is null)
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [string.Empty] = ["This browser holds no session at this provider."],
+        });
+
+    await userManager.UpdateSecurityStampAsync(user);
+    await EndSessionForItsClientsAsync(services, session!.SessionId, session.Subject);
+    await authService.SignOutAsync();
+    return Results.NoContent();
+}
+
+// Ends a provider session through the library, as its end-session endpoint ends one: the terminator revokes
+// the tokens issued in the session and sends a back-channel logout token to every client recorded as signed
+// in to it. Removing the cookie from the browser is the caller's part. The tenant is the one serving the
+// request, since a session belongs to the tenant it was signed in at.
+static async Task EndSessionForItsClientsAsync(IServiceProvider services, string sessionId, string subject)
+{
+    var tenant = services.GetRequiredService<ITenantAccessor>().Current?.Tenant
+                 ?? throw new InvalidOperationException("The request was not resolved to a tenant, so the session cannot be ended at one.");
+
+    await services.GetRequiredService<IAuthSessionTerminator>().TerminateAsync(tenant, sessionId, subject);
 }
 
 // Login and sign-up share their tail: establish the library session, then return the authorize URL that

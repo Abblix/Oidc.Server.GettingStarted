@@ -13,7 +13,8 @@ namespace McpServerApp;
 /// <remarks>
 /// The SDK's own challenge carries only resource_metadata. The MCP authorization specification adds that servers
 /// "SHOULD include a scope parameter in the WWW-Authenticate header", which clients then request first, and that a
-/// token lacking a scope gets 403 with error="insufficient_scope" naming the scopes needed.
+/// token lacking a scope gets 403 with error="insufficient_scope" naming the scopes needed. The 401 names the scopes the
+/// resource metadata lists, the minimal set a client starts with, rather than the whole catalog.
 /// </remarks>
 public sealed class ScopeChallengeHandler(
     IOptionsMonitor<McpAuthenticationOptions> options,
@@ -34,9 +35,15 @@ public sealed class ScopeChallengeHandler(
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
     {
+        // The specification: "servers SHOULD include the scopes needed to satisfy the current operation in the scope
+        // parameter". ToolScopeGate names the scope of the tool called; any other refusal names every scope.
+        var scope = properties.Items.TryGetValue(ToolScopeGate.ScopeProperty, out var needed) && needed is not null
+            ? needed
+            : Scope;
+
         Response.StatusCode = StatusCodes.Status403Forbidden;
         Response.Headers.WWWAuthenticate =
-            $"Bearer error=\"insufficient_scope\", scope=\"{Scope}\", resource_metadata=\"{MetadataUri}\"";
+            $"Bearer error=\"insufficient_scope\", scope=\"{scope}\", resource_metadata=\"{MetadataUri}\"";
         return Task.CompletedTask;
     }
 

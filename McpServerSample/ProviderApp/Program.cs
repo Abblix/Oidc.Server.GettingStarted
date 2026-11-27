@@ -1,12 +1,13 @@
 using System.Net;
-using Abblix.DependencyInjection;
+using System.Threading.RateLimiting;
 using Abblix.Jwt;
+using Abblix.Oidc;
 using Abblix.Oidc.Server.AspNetCore;
 using Abblix.Oidc.Server.Common.Configuration;
 using Abblix.Oidc.Server.Common.Constants;
 using Abblix.Oidc.Server.Common.Interfaces;
-using Abblix.Oidc.Server.Endpoints.DynamicClientManagement.Validation;
 using Abblix.Oidc.Server.Features;
+using Abblix.Oidc.Server.Features.ClientIdMetadataDocuments;
 using Abblix.Oidc.Server.Features.ClientInformation;
 using Abblix.Oidc.Server.Features.Consents;
 using Abblix.Oidc.Server.Features.MultiTenancy;
@@ -19,18 +20,51 @@ using Abblix.Oidc.Server.Model;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration.Json;
 using ProviderApp;
 using UriBuilder = Abblix.Utils.UriBuilder;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
-var issuer = configuration["Provider:Issuer"]
-             ?? throw new InvalidOperationException("Provider:Issuer is not configured");
-var mcpResource = configuration["McpServer:Resource"]
-                  ?? throw new InvalidOperationException("McpServer:Resource is not configured");
-var mcpScope = configuration["McpServer:Scope"]
-               ?? throw new InvalidOperationException("McpServer:Scope is not configured");
+var issuer = HttpsUri(configuration["Provider:Issuer"], "Provider:Issuer");
+var mcpResource = HttpsUri(configuration["McpServer:Resource"], "McpServer:Resource");
+var readScope = configuration["McpServer:Scopes:Read"]
+                ?? throw new InvalidOperationException("McpServer:Scopes:Read is not configured");
+var writeScope = configuration["McpServer:Scopes:Write"]
+                 ?? throw new InvalidOperationException("McpServer:Scopes:Write is not configured");
+// The client identifier URLs whose documents this provider fetches; unset, it fetches any the draft allows
+var allowedClientIdPrefixes = configuration.GetSection("ClientIdMetadataDocuments:AllowedClientIdPrefixes").Get<string[]>();
+
+const string clientSecretEncryptionKeySetting = "Provider:ClientSecretEncryptionKey";
+var clientSecretEncryptionKey = configuration[clientSecretEncryptionKeySetting];
+if (string.IsNullOrWhiteSpace(clientSecretEncryptionKey))
+{
+    throw new InvalidOperationException(
+        $"{clientSecretEncryptionKeySetting} is not configured: set it to 32 random bytes, base64");
+}
+
+// The key in appsettings.json is published with the sample, so it keeps the stored secrets from nobody. It serves
+// development alone: anywhere else the value has to come from a source of the deployment's own, an environment
+// variable or a secret store, and the last provider holding the setting is the one whose value is used.
+var keySource = ((IConfigurationRoot)configuration).Providers.Last(provider => provider.TryGet(clientSecretEncryptionKeySetting, out _));
+if (!builder.Environment.IsDevelopment() && keySource is JsonConfigurationProvider { Source.Path: "appsettings.json" })
+{
+    throw new InvalidOperationException(
+        $"{clientSecretEncryptionKeySetting} comes from appsettings.json, which holds the key published with the " +
+        "sample and serves development only. Set your own, 32 random bytes in base64, through an environment " +
+        "variable or a secret store.");
+}
+
+// Open registration lets anyone create clients, so each address may register only so many in a window
+const string RegistrationRateLimit = "registration";
+var registrationPermits = configuration.GetValue<int?>("Registration:PermitLimit") is { } permits and > 0
+    ? permits
+    : throw new InvalidOperationException("Registration:PermitLimit has to be a positive number of registrations");
+var registrationWindow = TimeSpan.TryParse(configuration["Registration:Window"], out var window) && window > TimeSpan.Zero
+    ? window
+    : throw new InvalidOperationException("Registration:Window has to be a positive time span such as 00:01:00");
 
 var userStore = new TestUserStore(
     new TestUser(
@@ -41,25 +75,66 @@ var userStore = new TestUserStore(
 builder.Services.AddSingleton(userStore);
 builder.Services.AddSingleton<IUserInfoProvider>(userStore);
 
-// With open registration below any application can become a client, so the user approves each authorization on
-// the consent page, which names the client and the host its redirect URI points to (the MCP specification asks
-// the authorization server to display it). ConsentPageDecisions says why no approval is remembered.
+// Any application can become a client, by registering itself or by naming its metadata document, so the user
+// approves each authorization on the consent page, which names the client, where its name comes from, and the host
+// its redirect URI points to (the MCP specification asks the authorization server to display it).
+// ConsentPageDecisions says why no approval is remembered.
 builder.Services.AddSingleton<ConsentPageDecisions>();
 builder.Services.AddSingleton<IUserConsentsProvider>(services => services.GetRequiredService<ConsentPageDecisions>());
 
-builder.Services.AddOidcServices(options =>
+var oidcServer = builder.Services.AddOidcServices(options =>
 {
-    // MCP clients have no relationship with this provider before they connect, so they register themselves
-    // (RFC 7591). Registration without an initial access token is what lets them do that unattended; the
-    // library's default asks for one.
+    // MCP clients have no relationship with this provider before they connect, so a client without a metadata
+    // document registers itself (RFC 7591). Registration without an initial access token is what lets it do that
+    // unattended; the library's default asks for one.
     options.RequireInitialAccessToken = false;
+
+    // #region new-client-options
+    options.NewClientOptions = new NewClientOptions
+    {
+        // These are the library's defaults, written out so the sample shows the policy: an MCP client acts for a user
+        // through the authorization code flow, renewed by refresh tokens, so a registration asking for anything else,
+        // client_credentials included (a token for the MCP server with no user behind it), is refused.
+        AllowedGrantTypes = [GrantTypes.AuthorizationCode, GrantTypes.RefreshToken],
+
+        // Allowed gives MCP clients a refresh token without prompt=consent: they ask for offline_access without it,
+        // and by default (ConsentRequired) such a request gets none (OpenID Connect Core 1.0, section 11). The user's
+        // answer on the consent page stands in for prompt=consent, so the assistant keeps working after its access token expires.
+        OfflineAccess = OfflineAccess.Allowed,
+
+        // A client that registers itself may get a token for the task tracker and nothing else this provider
+        // protects, whatever it names: which resources a client reaches is the provider's policy, not the client's
+        AllowedResources = [mcpResource],
+    };
+    // #endregion
+
+#pragma warning disable ABX9001 // Client ID Metadata Documents are experimental until the draft becomes an RFC
+    // #region cimd-prefixes
+    // A client may name itself by the https URL of a metadata document it publishes instead of registering
+    // (draft-ietf-oauth-client-id-metadata-document-03). With prefixes set, the provider fetches only documents under
+    // them, so a URL of an untrusted vendor is refused without a request leaving the provider; the user still
+    // approves every client on the consent page.
+    options.ClientIdMetadataDocuments = new ClientIdMetadataDocumentOptions
+    {
+        AllowedClientIdPrefixes = allowedClientIdPrefixes,
+
+        // McpClientApp serves its document on this machine, and the draft forbids fetching one from a special-use
+        // address (section 10.7) except on a development machine whose authorization server is itself on loopback.
+        // The library applies this only while the tenant's issuer is on loopback, and a Production host does not
+        // start with it.
+        DocumentAddresses = builder.Environment.IsDevelopment()
+            ? ClientIdMetadataDocumentAddresses.AllowLoopback
+            : ClientIdMetadataDocumentAddresses.PublicOnly,
+    };
+    // #endregion
+#pragma warning restore ABX9001
 
     options.Tenants.Add(new TenantDefinition
     {
         Id = "main",
-        Issuer = new Uri(issuer),
+        Issuer = issuer,
 
-        // No pre-registered clients: every MCP client arrives through dynamic registration
+        // No pre-registered clients: every MCP client arrives by its metadata document or by dynamic registration
         Clients = [],
 
         LoginUri = new Uri("/Auth/Login", UriKind.Relative),
@@ -67,31 +142,35 @@ builder.Services.AddOidcServices(options =>
         // Where the provider sends the user while ConsentPageDecisions holds the request's consent pending
         ConsentUri = new Uri("/Auth/Consent", UriKind.Relative),
 
-        // MCP clients register with the scope the MCP server's challenge names, and the registration endpoint
-        // knows only the tenant's own scopes, not those of its resources: declared on the resource alone,
-        // mcp:tools is refused at registration as an unknown scope.
-        Scopes = [new ScopeDefinition(mcpScope)],
-
-        // The MCP server as a protected resource. A client naming it in the resource parameter gets an access
-        // token whose audience is exactly this URI, which is what the MCP server checks.
+        // The task tracker's MCP server as a protected resource, with a scope for reading the employee's tasks and
+        // one for changing them. A client naming it in the resource parameter gets an access token whose audience
+        // is exactly this URI, which is what the MCP server checks. Registration accepts a scope a resource declares.
         Resources =
         [
-            new ResourceDefinition(new Uri(mcpResource, UriKind.Absolute), new ScopeDefinition(mcpScope)),
+            new ResourceDefinition(
+                mcpResource,
+                new ScopeDefinition(readScope),
+                new ScopeDefinition(writeScope)),
         ],
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
+
+        // The key each issued client_secret is also kept encrypted with, so a client reading its registration
+        // (RFC 7592 section 3) gets its secret back. A tenant serving registration does not start without one.
+        ClientSecretEncryption = new ClientSecretEncryptionSettings { Key = clientSecretEncryptionKey },
     });
 });
+
+#pragma warning disable ABX9001
+// Resolves a client_id that is an https URL by fetching its document through the library's outbound guard, and
+// advertises client_id_metadata_document_supported in the metadata. What such a client may ask for is bounded by
+// NewClientOptions above, as for a client that registers itself.
+oidcServer.AddClientIdMetadataDocuments();
+#pragma warning restore ABX9001
 
 // Serves the registration endpoint and advertises it as registration_endpoint in the metadata; without this
 // call the provider has no registration endpoint at all.
 builder.Services.AddDynamicClientRegistration();
-
-// Open registration admits any grant type the server supports, client_credentials included, which would get a
-// token for the MCP server with no user behind it. This step, added to the end of the library's registration
-// pipeline, admits only the grants an MCP client acting for a user needs.
-builder.Services.Decompose<IClientRegistrationContextValidator>()
-    .AddLast(ServiceDescriptor.Singleton<IClientRegistrationContextValidator, UserGrantsOnlyValidator>());
 
 builder.Services.AddAuthentication().AddCookie();
 
@@ -101,6 +180,26 @@ builder.Services.AddAntiforgery();
 builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
+
+// Registrations are counted per client address; every other OIDC endpoint passes unlimited. The registration endpoint
+// is recognised by the address the library publishes for it.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(RegistrationRateLimit, context =>
+    {
+        var registration = context.RequestServices.GetRequiredService<IOidcEndpointResolver>()
+            .Resolve(OidcEndpoints.RegisterClient)!;
+
+        // The published address includes the path base the host may be mounted under, so the request's does too
+        var path = context.Request.PathBase.Add(context.Request.Path);
+        return HttpMethods.IsPost(context.Request.Method) && path == registration.AbsolutePath
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = registrationPermits, Window = registrationWindow })
+            : RateLimitPartition.GetNoLimiter("");
+    });
+});
 
 var app = builder.Build();
 
@@ -119,7 +218,10 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 
-app.MapOidcEndpoints();
+// After routing, so the policy sees which endpoint a request reached
+app.UseRateLimiter();
+
+app.MapOidcEndpoints().RequireRateLimiting(RegistrationRateLimit);
 
 app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
     Results.Content(LoginPage(antiforgery.GetAndStoreTokens(context), request_uri, error: null), "text/html"));
@@ -195,15 +297,19 @@ app.MapGet("/Auth/Consent", async (
     if (request == null)
         return Results.Content(ExpiredPage(), "text/html");
 
-    var client = await clientInfoProvider.TryFindClientAsync(tenant, request.ClientId!);
+    // The authorization endpoint already found the client before sending the user here, so the name is only looked up
+    var clientName = (await clientInfoProvider.FindClientAsync(tenant, request.ClientId!)).TryGetSuccess(out var client)
+        ? client.ClientName
+        : null;
     return Results.Content(
-        ConsentPage(antiforgery.GetAndStoreTokens(context), requestUri, request, client?.ClientName),
+        ConsentPage(antiforgery.GetAndStoreTokens(context), requestUri, request, clientName),
         "text/html");
 });
 
 app.MapPost("/Auth/Consent", async (
         [FromForm] string requestUri,
         [FromForm] string decision,
+        [FromForm(Name = "scope")] string[]? scopes,
         IAntiforgery antiforgery,
         HttpContext context,
         IAuthSessionService authService,
@@ -223,23 +329,31 @@ app.MapPost("/Auth/Consent", async (
 
         // Only a request the provider sent the user here with can be answered
         var tenant = tenantAccessor.CurrentTenant();
-        if (await requestStorage.TryGetAsync(tenant, storedUri) == null)
+        if (await requestStorage.TryGetAsync(tenant, storedUri) is not { } request)
             return Results.Content(ExpiredPage(), "text/html");
 
-        // The value comes from the browser, so anything but the two buttons' values is a bad request, not a fault
-        bool? granted = decision switch
-        {
-            "allow" => true,
-            "deny" => false,
-            _ => null,
-        };
-        if (granted == null)
+        // The values come from the browser, so anything but the two buttons' values, or a scope the request did not
+        // ask for, is a bad request, not a fault. Allow with every scope cleared grants nothing, which is a refusal.
+        var checkedScopes = scopes ?? [];
+        if (!checkedScopes.All(scope => request.Scope.Contains(scope, StringComparer.Ordinal)))
             return Results.BadRequest();
 
-        decisions.Record(tenant, authSession, storedUri, granted.Value);
+        switch (decision)
+        {
+            case "allow" when checkedScopes.Length > 0:
+                decisions.Record(tenant, authSession, storedUri, checkedScopes);
+                break;
 
-        // Back to the authorization endpoint, which resumes the request: a code for the client when the user
-        // allowed it, access_denied when not
+            case "allow" or "deny":
+                decisions.Record(tenant, authSession, storedUri, grantedScopes: null);
+                break;
+
+            default:
+                return Results.BadRequest();
+        }
+
+        // Back to the authorization endpoint, which resumes the request: a code for the scopes the user allowed,
+        // access_denied when the user allowed none
         var authorizeUrl = new UriBuilder(endpointResolver.Resolve(OidcEndpoints.Authorize)!)
             { Query = { [AuthorizationRequest.Parameters.RequestUri] = storedUri.OriginalString } };
         return Results.Redirect(authorizeUrl);
@@ -256,7 +370,34 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
     var clientId = WebUtility.HtmlEncode(request.ClientId ?? "");
     var redirectUri = WebUtility.HtmlEncode(request.RedirectUri?.OriginalString ?? "");
     var redirectHost = WebUtility.HtmlEncode(request.RedirectUri?.Host ?? "");
-    var scopes = string.Join("", request.Scope.Select(scope => $"<li>{WebUtility.HtmlEncode(scope)}</li>"));
+
+    // The provider assigns the client_id of every client that registers, so no registered client has one that is an
+    // https URL, and a client_id written as one is the address of a metadata document. Its name is the document's
+    // claim; the host it is published on is the one thing the provider checked (draft-ietf-oauth-client-id-metadata-
+    // document-03 section 10.10). The URL is recognised the way the library recognises a client identifier URL,
+    // character for character.
+    var origin = request.ClientId is { } id &&
+                 id.StartsWith("https://", StringComparison.Ordinal) &&
+                 Uri.TryCreate(id, UriKind.Absolute, out var documentUrl) &&
+                 string.Equals(documentUrl.AbsoluteUri, id, StringComparison.Ordinal)
+        ? $"Its description is published at <b>{WebUtility.HtmlEncode(documentUrl.Authority)}</b>, and the name is " +
+          "that description's claim."
+        : "It registered itself with this provider, so the name is its own claim.";
+
+    // The MCP specification: authorization servers "SHOULD display additional warnings for localhost-only redirect
+    // URIs". Any program on the user's computer can listen on a loopback port, so the code may reach one the user
+    // never meant to authorize.
+    var loopbackWarning = request.RedirectUri is { IsLoopback: true }
+        ? "<p><b>The code goes to a program on this computer.</b> Any program running on it could receive the code, " +
+          "so allow only if you have just started this application yourself.</p>"
+        : "";
+
+    // Each scope is granted on its own: the user may allow the application to read without letting it change
+    var scopes = string.Join("", request.Scope.Select(scope =>
+    {
+        var value = WebUtility.HtmlEncode(scope);
+        return $"""<li><label><input type="checkbox" name="scope" value="{value}" checked /> {value}</label></li>""";
+    }));
     var resources = string.Join("", (request.Resources ?? [])
         .Select(resource => $"<li>{WebUtility.HtmlEncode(resource.OriginalString)}</li>"));
     return $"""
@@ -265,16 +406,16 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
         <head><title>McpServerSample provider</title></head>
         <body>
             <h1>Allow {client}?</h1>
-            <p>The application <b>{client}</b> (client ID <code>{clientId}</code>) asks to act for you. It registered
-            itself with this provider, so the name is its own claim.</p>
+            <p>The application <b>{client}</b> (client ID <code>{clientId}</code>) asks to act for you. {origin}</p>
             <p>If you allow it, the provider sends the authorization code to <b>{redirectHost}</b>: <code>{redirectUri}</code></p>
-            <p>Scopes:</p>
-            <ul>{scopes}</ul>
-            <p>Resources:</p>
-            <ul>{resources}</ul>
+            {loopbackWarning}
             <form method="post" action="/Auth/Consent">
                 <input type="hidden" name="{WebUtility.HtmlEncode(tokens.FormFieldName)}" value="{WebUtility.HtmlEncode(tokens.RequestToken)}" />
                 <input type="hidden" name="requestUri" value="{WebUtility.HtmlEncode(requestUri.OriginalString)}" />
+                <p>Scopes it may use (clear one to refuse it):</p>
+                <ul>{scopes}</ul>
+                <p>Resources:</p>
+                <ul>{resources}</ul>
                 <button type="submit" name="decision" value="allow">Allow</button>
                 <button type="submit" name="decision" value="deny">Deny</button>
             </form>
@@ -293,6 +434,13 @@ static string ExpiredPage() => """
     </body>
     </html>
     """;
+
+static Uri HttpsUri(string? value, string name)
+    => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+        ? uri
+        : throw new InvalidOperationException(value is null
+            ? $"{name} is not configured"
+            : $"{name} is '{value}'; it has to be an absolute https URL");
 
 static string LoginPage(AntiforgeryTokenSet tokens, string? requestUri, string? error)
 {

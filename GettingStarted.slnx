@@ -4,10 +4,13 @@
   <Project Path="BffSample/BffSample.csproj" />
   <Project Path="BlazorSample/BlazorSample.csproj" />
   <Project Path="ExternalKeySample/ExternalKeySample.csproj" />
+  <Project Path="McpServerSample/McpClientApp/McpClientApp.csproj" />
   <Project Path="McpServerSample/McpServerApp/McpServerApp.csproj" />
   <Project Path="McpServerSample/ProviderApp/ProviderApp.csproj" />
   <Project Path="OpenIDProviderApp/OpenIDProviderApp.csproj" />
   <Project Path="OpenIDProviderApp.MinimalApi/OpenIDProviderApp.MinimalApi.csproj" />
+  <Project Path="ProtectedRegistrationSample/RegistrationClientApp/RegistrationClientApp.csproj" />
+  <Project Path="ProtectedRegistrationSample/RegistrationProviderApp/RegistrationProviderApp.csproj" />
   <Project Path="SharedSignalsSample/ReceiverApp/ReceiverApp.csproj" />
   <Project Path="SharedSignalsSample/TransmitterApp/TransmitterApp.csproj" />
   <Project Path="TestClientApp/TestClientApp.csproj" />

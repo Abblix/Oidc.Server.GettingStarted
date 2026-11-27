@@ -1,2 +1,4 @@
 # The guide's code blocks are included from these files byte for byte, and guide.sh runs in bash
 GettingStartedGuide/** text eol=lf
+# The documentation site includes these files with ::include and refuses CRLF
+McpServerSample/** text eol=lf
