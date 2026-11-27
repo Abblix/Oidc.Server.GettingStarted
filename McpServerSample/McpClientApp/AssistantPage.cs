@@ -1,5 +1,8 @@
 using System.Net;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Web;
 using Microsoft.AspNetCore.Antiforgery;
 using ModelContextProtocol;
@@ -33,6 +36,13 @@ public sealed class AssistantPage(
     ILoggerFactory loggerFactory)
 {
     private const string Home = "/";
+    private static readonly JsonSerializerOptions IndentedJson = new()
+    {
+        WriteIndented = true,
+
+        // The page HTML-encodes the answer, so a title keeps its own characters instead of escapes
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     private readonly Lock _lock = new();
     private Task _operation = Task.CompletedTask;
@@ -153,7 +163,7 @@ public sealed class AssistantPage(
             _operationTimeout = timeout;
             _cancelled = false;
             _last = (description, "Waiting for the answer", false);
-            _operation =operation = Task.Run(() => RunAsync(description, work, timeout));
+            _operation = operation = Task.Run(() => RunAsync(description, work, timeout, requested));
         }
 
         await Task.WhenAny(operation, requested);
@@ -162,7 +172,11 @@ public sealed class AssistantPage(
             : SeeOther(context, Home);
     }
 
-    private async Task RunAsync(string description, Func<CancellationToken, Task> work, CancellationTokenSource timeout)
+    private async Task RunAsync(
+        string description,
+        Func<CancellationToken, Task> work,
+        CancellationTokenSource timeout,
+        Task signInRequested)
     {
         traffic.ForgetRefusal();
         try
@@ -171,7 +185,7 @@ public sealed class AssistantPage(
         }
         catch (Exception exception)
         {
-            var reason = Reason(exception, timeout.IsCancellationRequested);
+            var reason = Reason(exception, timeout.IsCancellationRequested, signInRequested.IsCompleted);
             log.Add($"{description} failed: {reason}");
             SetLast(description, reason, failed: true);
         }
@@ -185,7 +199,7 @@ public sealed class AssistantPage(
         }
     }
 
-    private string Reason(Exception exception, bool stopped) => exception switch
+    private string Reason(Exception exception, bool stopped, bool signedInAgain) => exception switch
     {
         OperationCanceledException or TimeoutException when stopped && _cancelled => "cancelled on this page",
         OperationCanceledException or TimeoutException when stopped || exception is TimeoutException
@@ -195,8 +209,14 @@ public sealed class AssistantPage(
                "too, so it fetches the provider's new signing keys.",
 
         // The tracker's 403 for a scope the employee did not grant, once the SDK found no scope to step up to
-        HttpRequestException or McpException when traffic.RefusedScope is { } scope
+        HttpRequestException or McpException when traffic.RefusedScope is { } scope && signedInAgain
             => $"{trackerName} refused: the token lacks {scope}",
+
+        // The SDK tries one step-up per connection: once it has asked for a scope, a later refusal for the same scope
+        // fails at once, even when that sign-in was cancelled or denied, and only a new connection asks again
+        HttpRequestException or McpException when traffic.RefusedScope is { } scope
+            => $"{trackerName} refused: the token lacks {scope}. The assistant has already asked for it once since " +
+               "signing in; Sign in again to ask anew.",
         _ => exception.Message,
     };
 
@@ -317,7 +337,7 @@ public sealed class AssistantPage(
             body.Append($"<p>The assistant asks the provider for: <code>{Encode(asked)}</code></p>");
             body.Append($"<p><a class=\"button\" href=\"{Encode(pending.ToString())}\">" +
                         (refused is not null && asked.Split(' ').Contains(refused)
-                            ? $"Allow {Encode(refused)} at the provider"
+                            ? $"Allow {Encode(refused)}"
                             : "Continue to the provider") +
                         "</a></p>");
             body.Append($"<form method=\"post\" action=\"/cancel\">{formToken}<button class=\"secondary\">Cancel</button></form>");
@@ -329,9 +349,13 @@ public sealed class AssistantPage(
         }
 
         body.Append("<h2>Access</h2>");
-        if (_client is null || _access is null)
+        if (_client is null)
         {
             body.Append("<p>Not signed in.</p>");
+        }
+        else if (_access is null)
+        {
+            body.Append("<p>Signed in, but who_am_i did not answer; the log says why.</p>");
         }
         else
         {
@@ -359,7 +383,7 @@ public sealed class AssistantPage(
         if (last is { } shown)
         {
             body.Append($"<h2>Last call</h2><p><code>{Encode(shown.Call)}</code></p>");
-            body.Append($"<pre class=\"{(shown.Failed ? "failed" : "result")}\">{Encode(shown.Result)}</pre>");
+            body.Append($"<pre class=\"{(shown.Failed ? "failed" : "result")}\">{Encode(Indented(shown.Result))}</pre>");
         }
 
         body.Append("<h2>Log, latest first</h2><ol class=\"log\">");
@@ -407,6 +431,19 @@ public sealed class AssistantPage(
             </body>
             </html>
             """;
+
+    // A tool's JSON answer, indented for reading; any other answer as it came
+    private static string Indented(string text)
+    {
+        try
+        {
+            return JsonNode.Parse(text)?.ToJsonString(IndentedJson) ?? text;
+        }
+        catch (JsonException)
+        {
+            return text;
+        }
+    }
 
     private static string Encode(string text) => WebUtility.HtmlEncode(text);
 }

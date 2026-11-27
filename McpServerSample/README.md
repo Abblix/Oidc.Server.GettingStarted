@@ -76,7 +76,7 @@ It builds one image with the three apps (after a change to the sample, `docker c
 - Sign in as `john.doe@example.com` with the password `Jd!2024$3cur3`.
 - The consent page says who asks (Example Assistant, with the host its document is published on), where the code goes (`http://127.0.0.1:5010/callback`, a program on this computer, with a warning) and what it gets access to (Task tracker, McpServerApp). Choose Allow.
 - The browser comes back to the assistant's page. Access shows what the tracker sees of the token, as `who_am_i` answers: subject `1234567890`, the `client_id` and scope `offline_access tasks.read`. The log shows `Served the metadata document (Accept: application/json)`, the token issued with its scopes, and the tools.
-- Choose Create task. The tracker answers `403` because the token lacks `tasks.write`, and the page says "Task tracker (McpServerApp) refused: the token lacks tasks.write" and offers Allow tasks.write at the provider. Choose it: you are still signed in, so the consent page appears at once, now with `tasks.write`. Choose Allow.
+- Choose Create task. The tracker answers `403` because the token lacks `tasks.write`, and the page says "Task tracker (McpServerApp) refused: the token lacks tasks.write" and offers Allow tasks.write. Choose it: you are still signed in, so the consent page appears at once, now with `tasks.write`. Choose Allow.
 - Back on the page, the last call shows the new task, Access shows `tasks.write` too, and the log has the new token. Enter the task's id and choose Close task, then List my tasks.
 - Stop the three apps with Ctrl+C. `docker compose down` removes the containers. The provider keeps its Data Protection keys in a Docker volume, so a browser's antiforgery cookie from an earlier run still decrypts; `docker compose down -v` removes the volume too.
 
@@ -152,7 +152,7 @@ The provider admits it because `RequireInitialAccessToken = false`, limits it to
 
 ## Reading and changing tasks
 
-`tasks.read` covers `list_my_tasks` and `who_am_i`, `tasks.write` covers `create_task` and `close_task`, and every tool works on the tasks of the token's subject. The tracker lists every tool to every token, so the assistant calls `create_task` while it can only read and gets `403` with `error="insufficient_scope", scope="tasks.write"`. It then asks the employee again with `tasks.write` added (the MCP step-up flow) and repeats the call. If the new token still lacks the scope, the call ends with the `403`.
+`tasks.read` covers `list_my_tasks` and `who_am_i`, `tasks.write` covers `create_task` and `close_task`, and every tool works on the tasks of the token's subject. The tracker lists every tool to every token, so the assistant calls `create_task` while it can only read and gets `403` with `error="insufficient_scope", scope="tasks.write"`. It then asks the employee again with `tasks.write` added (the MCP step-up flow) and repeats the call. If the new token still lacks the scope, the call ends with the `403`. The SDK tries one step-up per connection: once the assistant has asked for `tasks.write`, a later refusal fails at once, even when that sign-in was cancelled or denied, and the page offers Sign in again, which asks anew.
 
 ## Signing out
 
