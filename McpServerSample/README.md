@@ -1,14 +1,21 @@
 # MCP Server Sample: a company task tracker used by an AI assistant
 
-A company exposes its task tracker as an MCP server. An AI assistant made by another company uses it on an employee's behalf. The company's provider, built on Abblix OIDC Server, has no account for the assistant: the assistant's `client_id` is the URL of a metadata document its vendor publishes, and the provider accepts it because the URL starts with a prefix the company trusts. The employee signs in at the provider and decides what the assistant may do.
+A company exposes its task tracker as an MCP server. An AI assistant uses it on an employee's behalf. The employee signs in at the company's provider and decides what the assistant may do.
+
+What the sample shows:
+
+- An MCP server protected by the MCP authorization flow, with Abblix OIDC Server as its authorization server.
+- A client known only by its Client ID Metadata Document: no registration and no shared secret, just a `client_id` prefix the company trusts.
+- The employee's consent per scope: the assistant starts with reading only.
+- Step-up: when the assistant tries to change a task, the tracker answers `403`, the assistant asks for `tasks.write`, and the employee allows it.
+
+For the details, see the article [Securing an MCP server](https://www.abblix.com/en/docs/securing-an-mcp-server).
 
 Three apps, one machine:
 
 - `ProviderApp`, the provider: `https://localhost:5007`
 - `McpServerApp`, the tracker: `https://localhost:5008/mcp`
 - `McpClientApp`, the assistant: its metadata document at `https://localhost:5009/client-metadata.json`, its page at `http://127.0.0.1:5010/`
-
-The article [Securing an MCP server](https://www.abblix.com/en/docs/securing-an-mcp-server) explains how it works and what to do next.
 
 ## Run it in Docker
 
