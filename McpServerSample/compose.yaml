@@ -8,7 +8,9 @@
 # document and the redirect URI stay as the apps' own settings name them, and the provider fetches the document from
 # loopback by ClientIdMetadataDocumentAddresses.AllowLoopback, as on a developer's machine.
 
-# One image for the three apps, built by the provider service alone, so they serve and trust one root
+# One image for the three apps, built by the provider service alone, so they serve and trust one certificate
+# Data Protection keeps its keys in the container and unencrypted, and warns that they end with it. They protect only
+# the cookies and forms of one run, which end with the container too, so every service turns those warnings off.
 x-app: &app
   image: mcp-server-sample
   pull_policy: never
@@ -23,6 +25,7 @@ services:
     command: [ "dotnet", "ProviderApp.dll" ]
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
       # On every interface of the namespace, so the port published below reaches it; the issuer stays localhost
       ASPNETCORE_URLS: https://+:5007
     # The namespace's ports, published on the host's loopback alone: the provider's pages and the assistant's redirect
@@ -42,6 +45,7 @@ services:
     command: [ "dotnet", "McpServerApp.dll" ]
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
       ASPNETCORE_URLS: https://localhost:5008
     healthcheck:
       <<: *listening
@@ -72,7 +76,10 @@ services:
     command: [ "dotnet", "McpClientApp.dll", "--SignIn", "browser" ]
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
       # The addresses the app takes from its document, the redirect on every interface so the published port reaches it
       Kestrel__Endpoints__Document__Url: https://localhost:5009
       Kestrel__Endpoints__Redirect__Url: http://+:5010
+      # These endpoints replace the addresses the app passes to UseUrls, and Kestrel warns that it does so
+      Logging__LogLevel__Microsoft.AspNetCore.Server.Kestrel: Error
     depends_on: *ready
