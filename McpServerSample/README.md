@@ -63,22 +63,22 @@ curl -k https://localhost:5007/.well-known/oauth-authorization-server
 You need Docker and ports 5007 and 5010 free on this computer. From `McpServerSample`:
 
 ```shell
-docker compose up --exit-code-from assistant
+docker compose up
 ```
 
-It builds one image with the three apps, starts the provider and the tracker, and runs the assistant with `--SignIn headless`, which answers the consent page with `allow`. The assistant's lines in the log are the ones the browser run prints: `Served the metadata document (Accept: application/json)`, the tools, `who_am_i: subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read`, the tasks, a second sign-in asking for `tasks.write`, `create_task`, `close_task` and the tasks again. Then the containers stop, and the command exits with the assistant's exit code, 0 when the scenario passed.
+It builds one image with the three apps, starts the provider and the tracker, and then the assistant, which prints the authorization URL in the log, as in [Run it](#run-it). Open it in a browser on this computer. The browser warns once about the provider's certificate, which the image build issued and your computer does not trust; continue to the sign-in page, sign in and allow. The redirect back to `http://127.0.0.1:5010/callback` reaches the assistant's container. When the assistant has finished, stop the provider and the tracker with Ctrl+C; `docker compose down` removes the containers.
 
-To sign in and allow in your own browser:
+To run the same scenario with no browser, for example in CI:
 
 ```shell
-docker compose --profile browser up --exit-code-from assistant-browser
+docker compose --profile headless up --exit-code-from assistant
 ```
 
-The assistant prints the authorization URL in the log, as in [Run it](#run-it); open it on this computer. The browser warns once about the provider's certificate, which the image build issued and your computer does not trust; continue to the sign-in page. The redirect back to `http://127.0.0.1:5010/callback` reaches the assistant's container. `docker compose --profile browser down` removes the containers afterwards.
+The assistant signs in with `--SignIn headless`, which answers the consent page with `allow`, and its lines in the log are the ones the browser run prints: `Served the metadata document (Accept: application/json)`, the tools, `who_am_i: subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read`, the tasks, a second sign-in asking for `tasks.write`, `create_task`, `close_task` and the tasks again. Then the containers stop, and the command exits with the assistant's exit code, 0 when the scenario passed. `docker compose --profile headless down` removes them.
 
 The image build makes its own root certificate and, signed by it, one certificate for `localhost`, `127.0.0.1` and `::1`, which the three apps serve. They trust that root and no other, and nothing is installed or trusted on your computer. The root's private key stays in a build stage, outside the image the apps run from; Docker caches that stage, so the root changes only when the image is built with `--no-cache`.
 
-The tracker and the assistant join the provider's network namespace, so the three apps share one loopback interface and reach each other at the addresses they use under `dotnet run`. The issuer, the resource, the document URL and the redirect URI in the tokens and the metadata stay the same, and the provider fetches the document under `AllowLoopback`, which `ProviderApp` turns on in Development and the library applies only with an issuer on loopback. `SecureHttpFetchOptions.AllowedDestinations` could not stand in for it: the library never fetches a client identifier from a destination listed there. The provider publishes ports 5007 and 5010 on this computer's loopback alone; only the browser run uses them.
+The tracker and the assistant join the provider's network namespace, so the three apps share one loopback interface and reach each other at the addresses they use under `dotnet run`. The issuer, the resource, the document URL and the redirect URI in the tokens and the metadata stay the same, and the provider fetches the document under `AllowLoopback`, which `ProviderApp` turns on in Development and the library applies only with an issuer on loopback. `SecureHttpFetchOptions.AllowedDestinations` could not stand in for it: the library never fetches a client identifier from a destination listed there. The provider publishes ports 5007 and 5010 on this computer's loopback alone; the run without a browser leaves them unused.
 
 ## How a client becomes known
 
