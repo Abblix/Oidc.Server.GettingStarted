@@ -66,7 +66,15 @@ You need Docker and ports 5007 and 5010 free on this computer. From `McpServerSa
 docker compose up
 ```
 
-It builds one image with the three apps (after a change to the sample, `docker compose up --build` rebuilds it), starts the provider and the tracker, and then the assistant, which prints the authorization URL in the log, as in [Run it](#run-it). Open it in a browser on this computer. The browser warns once about the provider's certificate, which the image build issued and your computer does not trust; continue to the sign-in page, sign in and allow. The redirect back to `http://127.0.0.1:5010/callback` reaches the assistant's container. To add a task the assistant prints a second URL, asking for `tasks.write`: open it in the same browser, where the consent page appears at once, and allow again. When the assistant has finished, stop the provider and the tracker with Ctrl+C; `docker compose down` removes the containers. The provider keeps its Data Protection keys in a Docker volume, so a browser's antiforgery cookie from an earlier run still decrypts; `docker compose down -v` removes the volume too.
+It builds one image with the three apps (after a change to the sample, `docker compose up --build` rebuilds it), starts the provider and the tracker, and then the assistant. Then, step by step:
+
+- Wait for the assistant's line `Open this address in a browser and sign in:` and open the `https://localhost:5007/connect/authorize?...` address under it in a browser on this computer.
+- The browser warns about the provider's certificate, which the image build issued and your computer does not trust. Continue to localhost (in Chrome: Advanced, then Proceed to localhost).
+- Sign in as `john.doe@example.com` with the password `Jd!2024$3cur3`.
+- The consent page names Example Assistant and the host its document is published on, and warns that the code goes to a program on this computer. Choose Allow. The browser lands on `http://127.0.0.1:5010/callback` with "Signed in", and the log shows `Served the metadata document (Accept: application/json)`, the tools, `who_am_i: subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read` and the tasks.
+- The assistant tries to add a task, the tracker answers `403` because the token lacks `tasks.write`, and the assistant prints a second address, asking for `tasks.read tasks.write offline_access`. Open it in the same browser: you are still signed in, so the consent page appears at once, now with `tasks.write`. Choose Allow.
+- The log shows `create_task`, `close_task` and the tasks again, and then `mcp-client-app-1 exited with code 0`.
+- Stop the provider and the tracker with Ctrl+C. `docker compose down` removes the containers. The provider keeps its Data Protection keys in a Docker volume, so a browser's antiforgery cookie from an earlier run still decrypts; `docker compose down -v` removes the volume too.
 
 To run the same scenario with no browser, for example in CI:
 
