@@ -30,21 +30,35 @@ public sealed class BrowserSignIn(string clientName, Uri redirectUri) : ISignIn
     /// The endpoint at <see cref="redirectUri"/>: hands the response to the waiting authorization and tells the user
     /// to go back to the terminal.
     /// </summary>
+    /// <remarks>
+    /// The waiting authorization goes on only once the page has reached the browser: after the last sign-in the
+    /// assistant finishes in a few calls and exits, which would otherwise close the connection before the page is sent.
+    /// </remarks>
     public IResult Receive(HttpRequest request)
     {
+        var response = _response;
         var query = request.Query;
         if (query["error"].ToString() is { Length: > 0 } error)
         {
-            _response.TrySetException(new InvalidOperationException(
-                $"The provider answered {error}: {query["error_description"]}"));
+            var refusal = new InvalidOperationException($"The provider answered {error}: {query["error_description"]}");
+            request.HttpContext.Response.OnCompleted(() =>
+            {
+                response.TrySetException(refusal);
+                return Task.CompletedTask;
+            });
             return Page($"The provider refused the request: {error}");
         }
 
-        _response.TrySetResult(new AuthorizationResult
+        var result = new AuthorizationResult
         {
             Code = query["code"].ToString(),
             State = query["state"].ToString(),
             Iss = query["iss"].ToString() is { Length: > 0 } iss ? iss : null,
+        };
+        request.HttpContext.Response.OnCompleted(() =>
+        {
+            response.TrySetResult(result);
+            return Task.CompletedTask;
         });
         return Page("Signed in. The assistant goes on in the terminal; this tab can be closed.");
     }
