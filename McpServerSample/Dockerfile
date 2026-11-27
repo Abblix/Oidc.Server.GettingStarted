@@ -19,7 +19,7 @@ COPY McpClientApp/McpClientApp.csproj McpClientApp/
 RUN dotnet restore ProviderApp/ProviderApp.csproj \
  && dotnet restore McpServerApp/McpServerApp.csproj \
  && dotnet restore McpClientApp/McpClientApp.csproj
- 
+
 COPY . .
 
 RUN dotnet publish ProviderApp/ProviderApp.csproj --no-restore -o /app/ProviderApp \
@@ -44,5 +44,8 @@ ENV \
     SSL_CERT_DIR=/etc/mcp-sample/trust \
     # Each service names its own addresses; the image's default http listener on 8080 is not one of them
     ASPNETCORE_HTTP_PORTS=
+
+# A volume mounted here starts with this folder's owner, so the apps' user can write its keys there
+RUN mkdir -p /home/app/.aspnet/DataProtection-Keys && chown -R app:app /home/app/.aspnet
 
 USER app

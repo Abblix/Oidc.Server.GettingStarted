@@ -1,6 +1,6 @@
 # The three apps of the sample in containers, with Docker as the only thing the host needs.
-#   docker compose up                                                        the scenario with the sign-in and consent in the host's browser
-#   docker compose --profile headless up --exit-code-from assistant          the same without a browser, its result in the log
+#   docker compose up                                                              the scenario with the sign-in and consent in the host's browser
+#   docker compose --profile headless up --exit-code-from mcp-client-app-headless  the same without a browser, its result in the log
 # The default profile comes from .env next to this file; --profile replaces it.
 #
 # The tracker and the assistant join the provider's network namespace, so the three share one loopback interface
@@ -9,16 +9,17 @@
 # loopback by ClientIdMetadataDocumentAddresses.AllowLoopback, as on a developer's machine.
 
 # One image for the three apps, built by the provider service alone, so they serve and trust one certificate
-# Data Protection keeps its keys in the container and unencrypted, and warns that they end with it. They protect only
-# the cookies and forms of one run, which end with the container too, so every service turns those warnings off.
+# Data Protection keeps its keys unencrypted, and in the container unless a volume holds them, and warns of both. That
+# is what a development run wants, so every service turns those warnings off; the provider keeps its keys in a volume.
 x-app: &app
   image: mcp-server-sample
   pull_policy: never
   environment:
     ASPNETCORE_ENVIRONMENT: Development
+    Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
 
 services:
-  provider:
+  provider-app:
     <<: *app
     build: .
     working_dir: /app/ProviderApp
@@ -28,6 +29,10 @@ services:
       Logging__LogLevel__Microsoft.AspNetCore.DataProtection: Error
       # On every interface of the namespace, so the port published below reaches it; the issuer stays localhost
       ASPNETCORE_URLS: https://+:5007
+    # The provider's Data Protection keys outlive its container, so a browser's antiforgery cookie from an earlier run
+    # still decrypts; docker compose down -v removes them
+    volumes:
+      - provider-keys:/home/app/.aspnet/DataProtection-Keys
     # The namespace's ports, published on the host's loopback alone: the provider's pages and the assistant's redirect
     # URI, which only the browser profile uses. A service joining this namespace cannot publish ports of its own.
     ports:
@@ -38,9 +43,9 @@ services:
       interval: 2s
       retries: 30
 
-  tracker:
+  mcp-server-app:
     <<: *app
-    network_mode: service:provider
+    network_mode: service:provider-app
     working_dir: /app/McpServerApp
     command: [ "dotnet", "McpServerApp.dll" ]
     environment:
@@ -51,27 +56,27 @@ services:
       <<: *listening
       test: [ "CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5008" ]
     depends_on:
-      provider:
+      provider-app:
         condition: service_healthy
 
   # Signs in without a browser, as --SignIn headless does, and exits with the scenario's result
-  assistant:
+  mcp-client-app-headless:
     <<: *app
     profiles: [ headless ]
-    network_mode: service:provider
+    network_mode: service:provider-app
     working_dir: /app/McpClientApp
     command: [ "dotnet", "McpClientApp.dll", "--SignIn", "headless", "--HeadlessSignIn:Consent", "allow" ]
     depends_on: &ready
-      provider:
+      provider-app:
         condition: service_healthy
-      tracker:
+      mcp-server-app:
         condition: service_healthy
 
   # Prints the authorization URL for the host's browser and receives its redirect through the published port 5010
-  assistant-browser:
+  mcp-client-app:
     <<: *app
     profiles: [ browser ]
-    network_mode: service:provider
+    network_mode: service:provider-app
     working_dir: /app/McpClientApp
     command: [ "dotnet", "McpClientApp.dll", "--SignIn", "browser" ]
     environment:
@@ -83,3 +88,6 @@ services:
       # These endpoints replace the addresses the app passes to UseUrls, and Kestrel warns that it does so
       Logging__LogLevel__Microsoft.AspNetCore.Server.Kestrel: Error
     depends_on: *ready
+
+volumes:
+  provider-keys:
