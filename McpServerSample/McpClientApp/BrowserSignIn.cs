@@ -31,8 +31,8 @@ public sealed class BrowserSignIn(string clientName, Uri redirectUri) : ISignIn
     /// to go back to the terminal.
     /// </summary>
     /// <remarks>
-    /// The waiting authorization goes on only once the page has reached the browser: after the last sign-in the
-    /// assistant finishes in a few calls and exits, which would otherwise close the connection before the page is sent.
+    /// The waiting authorization goes on only once the response is written, or the browser has gone: after the last
+    /// sign-in the assistant finishes in a few calls and exits, and its page has to be out before that.
     /// </remarks>
     public IResult Receive(HttpRequest request)
     {

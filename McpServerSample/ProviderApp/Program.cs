@@ -30,6 +30,10 @@ var configuration = builder.Configuration;
 
 var issuer = HttpsUri(configuration["Provider:Issuer"], "Provider:Issuer");
 var mcpResource = HttpsUri(configuration["McpServer:Resource"], "McpServer:Resource");
+var mcpResourceName = configuration["McpServer:Name"]
+                      ?? throw new InvalidOperationException("McpServer:Name is not configured");
+var mcpResourceApplication = configuration["McpServer:Application"]
+                             ?? throw new InvalidOperationException("McpServer:Application is not configured");
 var readScope = configuration["McpServer:Scopes:Read"]
                 ?? throw new InvalidOperationException("McpServer:Scopes:Read is not configured");
 var writeScope = configuration["McpServer:Scopes:Write"]
@@ -302,7 +306,13 @@ app.MapGet("/Auth/Consent", async (
         ? client.ClientName
         : null;
     return Results.Content(
-        ConsentPage(antiforgery.GetAndStoreTokens(context), requestUri, request, clientName),
+        ConsentPage(
+            antiforgery.GetAndStoreTokens(context),
+            requestUri,
+            request,
+            clientName,
+            mcpResource,
+            $"{mcpResourceName} ({mcpResourceApplication})"),
         "text/html");
 });
 
@@ -363,13 +373,18 @@ app.MapPost("/Auth/Consent", async (
 
 app.Run();
 
-static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, AuthorizationRequest request, string? clientName)
+static string ConsentPage(
+    AntiforgeryTokenSet tokens,
+    Uri requestUri,
+    AuthorizationRequest request,
+    string? clientName,
+    Uri mcpResource,
+    string mcpResourceName)
 {
     // Every value below was chosen by whoever registered the client, so each is encoded before it reaches the page
     var client = WebUtility.HtmlEncode(clientName ?? request.ClientId ?? "");
     var clientId = WebUtility.HtmlEncode(request.ClientId ?? "");
     var redirectUri = WebUtility.HtmlEncode(request.RedirectUri?.OriginalString ?? "");
-    var redirectHost = WebUtility.HtmlEncode(request.RedirectUri?.Host ?? "");
 
     // The provider assigns the client_id of every client that registers, so no registered client has one that is an
     // https URL, and a client_id written as one is the address of a metadata document. Its name is the document's
@@ -380,9 +395,8 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
                  id.StartsWith("https://", StringComparison.Ordinal) &&
                  Uri.TryCreate(id, UriKind.Absolute, out var documentUrl) &&
                  string.Equals(documentUrl.AbsoluteUri, id, StringComparison.Ordinal)
-        ? $"Its description is published at <b>{WebUtility.HtmlEncode(documentUrl.Authority)}</b>, and the name is " +
-          "that description's claim."
-        : "It registered itself with this provider, so the name is its own claim.";
+        ? $"its description, published at <b>{WebUtility.HtmlEncode(documentUrl.Authority)}</b>, names it so"
+        : "it registered itself with this provider under that name";
 
     // The MCP specification: authorization servers "SHOULD display additional warnings for localhost-only redirect
     // URIs". Any program on the user's computer can listen on a loopback port, so the code may reach one the user
@@ -391,6 +405,7 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
         ? "<p><b>The code goes to a program on this computer.</b> Any program running on it could receive the code, " +
           "so allow only if you have just started this application yourself.</p>"
         : "";
+    var redirectWhere = request.RedirectUri is { IsLoopback: true } ? ", a program on this computer" : "";
 
     // Each scope is granted on its own: the user may allow the application to read without letting it change
     var scopes = string.Join("", request.Scope.Select(scope =>
@@ -398,24 +413,29 @@ static string ConsentPage(AntiforgeryTokenSet tokens, Uri requestUri, Authorizat
         var value = WebUtility.HtmlEncode(scope);
         return $"""<li><label><input type="checkbox" name="scope" value="{value}" checked /> {value}</label></li>""";
     }));
-    var resources = string.Join("", (request.Resources ?? [])
-        .Select(resource => $"<li>{WebUtility.HtmlEncode(resource.OriginalString)}</li>"));
+    // The provider declares the resources it serves, so it can name them; the client names none of them here
+    var resources = string.Join(", ", (request.Resources ?? []).Select(resource =>
+        resource == mcpResource
+            ? $"<b>{WebUtility.HtmlEncode(mcpResourceName)}</b>"
+            : $"<code>{WebUtility.HtmlEncode(resource.OriginalString)}</code>"));
     return $"""
         <!DOCTYPE html>
         <html>
         <head><title>McpServerSample provider</title></head>
         <body>
             <h1>Allow {client}?</h1>
-            <p>The application <b>{client}</b> (client ID <code>{clientId}</code>) asks to act for you. {origin}</p>
-            <p>If you allow it, the provider sends the authorization code to <b>{redirectHost}</b>: <code>{redirectUri}</code></p>
+            <p><b>{client}</b> asks to act for you.</p>
+            <ul>
+                <li>Asked by: the application <b>{client}</b>; {origin} (client ID <code>{clientId}</code>)</li>
+                <li>The code goes to: <code>{redirectUri}</code>, the redirect address {client} gave{redirectWhere}</li>
+                <li>Access to: {resources}</li>
+            </ul>
             {loopbackWarning}
             <form method="post" action="/Auth/Consent">
                 <input type="hidden" name="{WebUtility.HtmlEncode(tokens.FormFieldName)}" value="{WebUtility.HtmlEncode(tokens.RequestToken)}" />
                 <input type="hidden" name="requestUri" value="{WebUtility.HtmlEncode(requestUri.OriginalString)}" />
                 <p>Scopes it may use (clear one to refuse it):</p>
                 <ul>{scopes}</ul>
-                <p>Resources:</p>
-                <ul>{resources}</ul>
                 <button type="submit" name="decision" value="allow">Allow</button>
                 <button type="submit" name="decision" value="deny">Deny</button>
             </form>
