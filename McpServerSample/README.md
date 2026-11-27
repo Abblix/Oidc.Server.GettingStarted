@@ -66,7 +66,7 @@ You need Docker and ports 5007 and 5010 free on this computer. From `McpServerSa
 docker compose up
 ```
 
-It builds one image with the three apps, starts the provider and the tracker, and then the assistant, which prints the authorization URL in the log, as in [Run it](#run-it). Open it in a browser on this computer. The browser warns once about the provider's certificate, which the image build issued and your computer does not trust; continue to the sign-in page, sign in and allow. The redirect back to `http://127.0.0.1:5010/callback` reaches the assistant's container. When the assistant has finished, stop the provider and the tracker with Ctrl+C; `docker compose down` removes the containers.
+It builds one image with the three apps, starts the provider and the tracker, and then the assistant, which prints the authorization URL in the log, as in [Run it](#run-it). Open it in a browser on this computer. The browser warns once about the provider's certificate, which the image build issued and your computer does not trust; continue to the sign-in page, sign in and allow. The redirect back to `http://127.0.0.1:5010/callback` reaches the assistant's container. To add a task the assistant prints a second URL, asking for `tasks.write`: open it in the same browser, where the consent page appears at once, and allow again. When the assistant has finished, stop the provider and the tracker with Ctrl+C; `docker compose down` removes the containers.
 
 To run the same scenario with no browser, for example in CI:
 
