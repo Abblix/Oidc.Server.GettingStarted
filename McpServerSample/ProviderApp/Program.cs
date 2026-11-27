@@ -421,7 +421,7 @@ static string ConsentPage(
     return $"""
         <!DOCTYPE html>
         <html>
-        <head><title>McpServerSample provider</title></head>
+        <head>{PageHead()}</head>
         <body>
             <h1>Allow {client}?</h1>
             <p><b>{client}</b> asks to act for you.</p>
@@ -444,10 +444,24 @@ static string ConsentPage(
         """;
 }
 
-static string ExpiredPage() => """
+// The head of every page: one centred column in the system font, as the assistant's page has
+static string PageHead() => """
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>McpServerSample provider</title>
+    <style>
+    body { font-family: system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; color: #222; background: #fff; }
+    code { font-family: ui-monospace, monospace; }
+    input[type=email], input[type=password] { font: inherit; padding: .3rem; }
+    button { padding: .4rem .9rem; border: 1px solid #0b5cad; border-radius: .25rem; background: #0b5cad; color: #fff; font: inherit; cursor: pointer; }
+    button[value=deny] { background: #fff; color: #0b5cad; }
+    </style>
+    """;
+
+static string ExpiredPage() => $"""
     <!DOCTYPE html>
     <html>
-    <head><title>McpServerSample provider</title></head>
+    <head>{PageHead()}</head>
     <body>
         <h1>The request has expired</h1>
         <p>Start again from the MCP client.</p>
@@ -469,7 +483,7 @@ static string LoginPage(AntiforgeryTokenSet tokens, string? requestUri, string? 
     return $"""
         <!DOCTYPE html>
         <html>
-        <head><title>McpServerSample provider</title></head>
+        <head>{PageHead()}</head>
         <body>
             <h1>Login</h1>
             {errorBlock}
@@ -485,10 +499,10 @@ static string LoginPage(AntiforgeryTokenSet tokens, string? requestUri, string? 
         """;
 }
 
-static string SignedInPage() => """
+static string SignedInPage() => $"""
     <!DOCTYPE html>
     <html>
-    <head><title>McpServerSample provider</title></head>
+    <head>{PageHead()}</head>
     <body>
         <h1>Signed in</h1>
         <p>Connect an MCP client to continue: it sends you here when it needs a sign-in.</p>

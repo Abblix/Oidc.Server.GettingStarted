@@ -1,5 +1,5 @@
 # The three apps of the sample in containers, with Docker as the only thing the host needs.
-#   docker compose up                                                              the scenario with the sign-in and consent in the host's browser
+#   docker compose up                                                              the assistant's page on http://127.0.0.1:5010/, signing in through the host's browser
 #   docker compose --profile headless up --exit-code-from mcp-client-app-headless  the same without a browser, its result in the log
 # The default profile comes from .env next to this file; --profile replaces it.
 #
@@ -72,7 +72,7 @@ services:
       mcp-server-app:
         condition: service_healthy
 
-  # Prints the authorization URL for the host's browser and receives its redirect through the published port 5010
+  # Serves the assistant's page and its redirect URI through the published port 5010, until Ctrl+C
   mcp-client-app:
     <<: *app
     profiles: [ browser ]

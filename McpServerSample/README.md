@@ -34,7 +34,9 @@ dotnet run --project McpServerSample/McpServerApp
 dotnet run --project McpServerSample/McpClientApp
 ```
 
-The assistant prints an authorization URL; open it in a browser. Its terminal shows `Served the metadata document (Accept: application/json)` before the sign-in page appears. Sign in as `john.doe@example.com` with `Jd!2024$3cur3` (declared in `ProviderApp/Program.cs`) and allow. The assistant prints the tools, `create_task` among them, and the tasks. To add a task it prints a second URL asking for `tasks.write`: open it in the same browser, and since you are still signed in, the consent page appears at once. Allow, and the assistant adds a task, closes it and lists the tasks. Each sign-in waits up to `Client:SignInTimeout`. If the browser shows an error instead of the sign-in page, the provider's log says why; stop the assistant with Ctrl+C.
+Open the assistant's page, `http://127.0.0.1:5010/`, and choose Sign in. The page sends the browser to the provider, and the assistant's terminal shows `Served the metadata document (Accept: application/json)` before the sign-in page appears. Sign in as `john.doe@example.com` with `Jd!2024$3cur3` (declared in `ProviderApp/Program.cs`) and allow. The browser comes back to the page, which shows what the tracker sees of the token, as `who_am_i` answers (the subject and `offline_access tasks.read`), and a button per tool. Choose Create task: the tracker answers `403` because the token lacks `tasks.write`, and the page says so and links to the provider again, now asking for `tasks.write`. Since you are still signed in, the consent page appears at once. Allow, and the page shows the new task and the scope with `tasks.write`; Close task (with the task's id) and List my tasks work as well.
+
+The page's log, latest first, shows each step: the tracker's `401` and the metadata documents read, the token issued and its scopes, each call and its result, the `403` and the token after the step-up. The terminal prints the same lines, the authorization URLs among them. The calls are made by the assistant with the token it holds; the token never reaches the browser. Each sign-in waits up to `Client:SignInTimeout`, and Cancel on the page ends one sooner. If the browser shows an error instead of the sign-in page, the provider's log says why. Ctrl+C stops the assistant.
 
 Other runs:
 
@@ -45,8 +47,8 @@ dotnet run --project McpServerSample/McpClientApp -- --SignIn headless
 ```
 
 - The first registers the assistant instead of naming its document.
-- The second keeps it to reading: adding a task leads to a second sign-in with the same scopes, then a `403`, and the assistant stops.
-- The third signs in without a browser, answering the consent page with `HeadlessSignIn:Consent` (`allow` or `deny`), so it can run in CI. `--HeadlessSignIn:GrantedScopes:0 tasks.read` unchecks every other scope.
+- The second keeps it to reading: Create task leads to a second sign-in with the same scopes, and then the page shows the tracker's `403`.
+- The third signs in without a browser, answering the consent page with `HeadlessSignIn:Consent` (`allow` or `deny`), and runs the scenario: it lists the tasks, adds one, closes it, lists them again and exits, with 0 when the scenario passed, so it can run in CI. `--HeadlessSignIn:GrantedScopes:0 tasks.read` unchecks every other scope.
 
 Another MCP client works too, pointed at `https://localhost:5008/mcp`, if it runs outside a browser (neither server sends CORS headers), trusts the development certificate, and either has a `client_id` under a prefix in `AllowedClientIdPrefixes` or registers as `application_type` `native` (this provider refuses a loopback redirect to a web client).
 
@@ -68,13 +70,15 @@ docker compose up
 
 It builds one image with the three apps (after a change to the sample, `docker compose up --build` rebuilds it), starts the provider and the tracker, and then the assistant. Then, step by step:
 
-- Wait for the assistant's line `Open this address in a browser and sign in:` and open the `https://localhost:5007/connect/authorize?...` address under it in a browser on this computer.
+- When the log shows `Open http://127.0.0.1:5010/ in a browser`, open `http://127.0.0.1:5010/` in a browser on this computer. It is the assistant's page: it names the tracker it works with, Task tracker (McpServerApp) at `https://localhost:5008/mcp`, and has a Sign in button.
+- Choose Sign in. The page's log shows the tracker's `401` with the address of its resource metadata, the two metadata documents the assistant reads, and the authorization address the browser goes to.
 - The browser warns about the provider's certificate, which the image build issued and your computer does not trust. Continue to localhost (in Chrome: Advanced, then Proceed to localhost).
 - Sign in as `john.doe@example.com` with the password `Jd!2024$3cur3`.
-- The consent page says who asks (Example Assistant, with the host its document is published on), where the code goes (`http://127.0.0.1:5010/callback`, a program on this computer, with a warning) and what it gets access to (Task tracker, McpServerApp). Choose Allow. The browser lands on `http://127.0.0.1:5010/callback` with "Signed in", and the log shows `Served the metadata document (Accept: application/json)`, the tools, `who_am_i: subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read` and the tasks.
-- The assistant tries to add a task, the tracker answers `403` because the token lacks `tasks.write`, and the assistant prints a second address, asking for `tasks.read tasks.write offline_access`. Open it in the same browser: you are still signed in, so the consent page appears at once, now with `tasks.write`. Choose Allow.
-- The log shows `create_task`, `close_task` and the tasks again, and then `mcp-client-app-1 exited with code 0`.
-- Stop the provider and the tracker with Ctrl+C. `docker compose down` removes the containers. The provider keeps its Data Protection keys in a Docker volume, so a browser's antiforgery cookie from an earlier run still decrypts; `docker compose down -v` removes the volume too.
+- The consent page says who asks (Example Assistant, with the host its document is published on), where the code goes (`http://127.0.0.1:5010/callback`, a program on this computer, with a warning) and what it gets access to (Task tracker, McpServerApp). Choose Allow.
+- The browser comes back to the assistant's page. Access shows what the tracker sees of the token, as `who_am_i` answers: subject `1234567890`, the `client_id` and scope `offline_access tasks.read`. The log shows `Served the metadata document (Accept: application/json)`, the token issued with its scopes, and the tools.
+- Choose Create task. The tracker answers `403` because the token lacks `tasks.write`, and the page says "Task tracker (McpServerApp) refused: the token lacks tasks.write" and offers Allow tasks.write at the provider. Choose it: you are still signed in, so the consent page appears at once, now with `tasks.write`. Choose Allow.
+- Back on the page, the last call shows the new task, Access shows `tasks.write` too, and the log has the new token. Enter the task's id and choose Close task, then List my tasks.
+- Stop the three apps with Ctrl+C. `docker compose down` removes the containers. The provider keeps its Data Protection keys in a Docker volume, so a browser's antiforgery cookie from an earlier run still decrypts; `docker compose down -v` removes the volume too.
 
 To run the same scenario with no browser, for example in CI:
 
@@ -82,7 +86,7 @@ To run the same scenario with no browser, for example in CI:
 docker compose --profile headless up --exit-code-from mcp-client-app-headless
 ```
 
-The assistant signs in with `--SignIn headless`, which answers the consent page with `allow`, and its lines in the log are the ones the browser run prints: `Served the metadata document (Accept: application/json)`, the tools, `who_am_i: subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read`, the tasks, a second sign-in asking for `tasks.write`, `create_task`, `close_task` and the tasks again. Then the containers stop, and the command exits with the assistant's exit code, 0 when the scenario passed. `docker compose --profile headless down` removes them; add `-v` to remove the provider's key volume too.
+The assistant signs in with `--SignIn headless`, which answers the consent page with `allow`, and runs the scenario the browser run's buttons make, printing: `Served the metadata document (Accept: application/json)`, the tools, `who_am_i: subject=1234567890; client_id=https://localhost:5009/client-metadata.json; scope=offline_access tasks.read`, the tasks, a second sign-in asking for `tasks.write`, `create_task`, `close_task` and the tasks again. Then the containers stop, and the command exits with the assistant's exit code, 0 when the scenario passed. `docker compose --profile headless down` removes them; add `-v` to remove the provider's key volume too.
 
 The image build makes the same ASP.NET Core development certificate for `localhost` that `dotnet dev-certs https` makes on a developer's machine, and the three apps serve it. It is self-signed, so it can be its own root, and the apps are told to trust it and no other; nothing is installed or trusted on your computer. Docker caches the build stage that makes it, so the certificate changes only when the image is built with `--no-cache`.
 
@@ -148,7 +152,7 @@ The provider admits it because `RequireInitialAccessToken = false`, limits it to
 
 ## Reading and changing tasks
 
-`tasks.read` covers `list_my_tasks` and `who_am_i`, `tasks.write` covers `create_task` and `close_task`, and every tool works on the tasks of the token's subject. The tracker lists every tool to every token, so the assistant calls `create_task` while it can only read and gets `403` with `error="insufficient_scope", scope="tasks.write"`. It then asks the employee again with `tasks.write` added (the MCP step-up flow) and repeats the call. If the new token still lacks the scope, it stops at the `403`.
+`tasks.read` covers `list_my_tasks` and `who_am_i`, `tasks.write` covers `create_task` and `close_task`, and every tool works on the tasks of the token's subject. The tracker lists every tool to every token, so the assistant calls `create_task` while it can only read and gets `403` with `error="insufficient_scope", scope="tasks.write"`. It then asks the employee again with `tasks.write` added (the MCP step-up flow) and repeats the call. If the new token still lacks the scope, the call ends with the `403`.
 
 ## Signing out
 
@@ -177,6 +181,7 @@ Assistant (`McpClientApp/Program.cs`, C# MCP SDK client):
 - `ClientMetadataDocumentUri` makes the SDK use the document when the provider supports it and register otherwise; `--Registration dynamic` forces registration.
 - `ScopeSelector` keeps to `Scopes` when set, and otherwise adds `RegistrationScopes` when registering.
 - It lists tools first, prints the scopes of each sign-in, bounds each with `Client:SignInTimeout`, returns `iss` with the code, and accepts plain `http` for the tracker only on this computer.
+- `AssistantPage` is the browser run's page. A button starts its call here, and the request waits until the call ends or the SDK asks for a sign-in; then the browser goes to the provider, the call waits in `BrowserSignIn`, and the redirect back hands it the code and waits for the call in turn. `TrackerTraffic`, under the SDK's `HttpClient`, and `LoggedTokenCache`, the SDK's token cache, write the page's log without the token.
 
 `McpServer:Resource` and `McpServer:Scopes` in the provider must equal `Mcp:Resource` and `Mcp:Scopes` in the tracker character for character, and `AllowedClientIdPrefixes` must cover the document's `client_id`.
 
@@ -205,7 +210,8 @@ Assistant (`McpClientApp/Program.cs`, C# MCP SDK client):
 - `McpClientApp/`
     - `client-metadata.json`: the vendor's document.
     - `Program.cs`, `ISignIn.cs`, `BrowserSignIn.cs`, `HeadlessSignIn.cs`: the assistant and its two ways to sign in.
-    - `appsettings.json`: tracker address, document, timeout, scopes, sign-in mode.
+    - `AssistantPage.cs`, `StepLog.cs`, `TrackerTraffic.cs`, `LoggedTokenCache.cs`: the browser run's page and its log.
+    - `appsettings.json`: tracker address and name, document, timeout, scopes, sign-in mode.
 - `Dockerfile`, `compose.yaml`, `.env`: the image, the services and the default profile of [Run it in Docker](#run-it-in-docker).
 - `Properties/launchSettings.json` in each project: its address and the Development environment.
 
