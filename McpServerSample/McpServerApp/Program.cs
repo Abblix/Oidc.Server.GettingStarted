@@ -30,6 +30,7 @@ var authentication = builder.Services.AddAuthentication(options =>
     options.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme;
 });
 
+// #region jwt-bearer
 authentication.AddJwtBearer(options =>
 {
     // The signing keys and the issuer come from the provider's metadata
@@ -64,6 +65,7 @@ authentication.AddJwtBearer(options =>
         },
     };
 });
+// #endregion
 
 authentication.AddScheme<McpAuthenticationOptions, ScopeChallengeHandler>(
     McpAuthenticationDefaults.AuthenticationScheme,
