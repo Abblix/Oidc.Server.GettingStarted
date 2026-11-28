@@ -125,8 +125,7 @@ Then:
   ```
 
 - Start `claude` and ask for your tasks in the tracker.
-- Ask it to create a task. Claude Code says the tracker needs additional permissions (scope `tasks.write`) and asks you to re-authenticate: run `/mcp`, choose the tracker, and allow `tasks.write` on the consent page.
-- Ask again: Claude Code creates the task, and can close it.
+- Ask it to create a task. The token lacks `tasks.write`, so Claude Code opens the browser on the consent page, now with `tasks.write`. Choose Allow, and Claude Code creates the task; it can close it too.
 
 `claude mcp remove tracker` removes the tracker.
 
