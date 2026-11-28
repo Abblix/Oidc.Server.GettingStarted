@@ -71,6 +71,8 @@ pids
 .env.test
 # The MCP sample's default compose profile, no secret: docker compose reads it next to compose.yaml
 !McpServerSample/.env
+# The host's development certificate exported for McpServerSample's containers, with its private key
+McpServerSample/certificate/
 
 # Ignore npm/bower debug log
 npm-debug.log*

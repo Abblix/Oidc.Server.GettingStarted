@@ -1,13 +1,5 @@
-# One image holds the three apps and the one certificate they serve and trust, so a build makes it once for all of them.
-# Nothing here reaches the host.
-
-FROM mcr.microsoft.com/dotnet/sdk:11.0.100 AS certificates
-WORKDIR /certificates
-
-# The ASP.NET Core development certificate for localhost, the one dotnet dev-certs makes on a developer machine,
-# written as localhost.crt and localhost.key. It is self-signed, so it is also the one root the apps trust.
-RUN dotnet dev-certs https --export-path /certificates/localhost.crt --format PEM --no-password \
- && chmod 0444 localhost.crt
+# One image holds the three apps. The certificate they serve is not in it: compose.yaml mounts the host's ASP.NET Core
+# development certificate, which the host's browser and agents already trust.
 
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100 AS build
 WORKDIR /src
@@ -29,19 +21,15 @@ RUN dotnet publish ProviderApp/ProviderApp.csproj --no-restore -o /app/ProviderA
 FROM mcr.microsoft.com/dotnet/aspnet:11.0.0
 
 COPY --from=build /app /app
-COPY --from=certificates /certificates/localhost.crt /etc/mcp-sample/trust/localhost.crt
-COPY --from=certificates /certificates/localhost.crt /etc/mcp-sample/tls/localhost.crt
-
-# Readable by the apps' user alone; copied after the certificate, whose copy creates the directory open to all
-COPY --from=certificates --chown=app:app --chmod=0400 /certificates/localhost.key /etc/mcp-sample/tls/localhost.key
 
 ENV \
-    # Every https endpoint serves the development certificate
-    Kestrel__Certificates__Default__Path=/etc/mcp-sample/tls/localhost.crt \
-    Kestrel__Certificates__Default__KeyPath=/etc/mcp-sample/tls/localhost.key \
-    # The apps trust that certificate and no other: .NET on Linux reads its trusted roots from these two places
-    SSL_CERT_FILE=/etc/mcp-sample/trust/localhost.crt \
-    SSL_CERT_DIR=/etc/mcp-sample/trust \
+    # Every https endpoint serves the certificate compose.yaml mounts here
+    Kestrel__Certificates__Default__Path=/etc/mcp-sample/certificate/localhost.crt \
+    Kestrel__Certificates__Default__KeyPath=/etc/mcp-sample/certificate/localhost.key \
+    # .NET on Linux trusts the roots in these two places: the public ones, so the provider can fetch an agent's metadata
+    # document from its vendor's site, and the mounted certificate, so the apps can call each other
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_DIR=/etc/mcp-sample/certificate \
     # Each service names its own addresses; the image's default http listener on 8080 is not one of them
     ASPNETCORE_HTTP_PORTS=
 
