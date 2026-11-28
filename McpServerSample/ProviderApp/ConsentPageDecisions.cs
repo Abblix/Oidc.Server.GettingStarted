@@ -13,7 +13,7 @@ namespace ProviderApp;
 /// The consent the user gives or refuses on the consent page, for one authorization request at a time.
 /// </summary>
 /// <remarks>
-/// Every client of this provider registered itself or names a metadata document nobody reviewed, so nothing assures
+/// Every client of this provider names a metadata document nobody reviewed, so nothing assures
 /// the provider who is asking, and RFC 10017
 /// section 6.3.3.2, repeating RFC 6749 section 10.2, says the authorization server "SHOULD NOT process
 /// authorization requests automatically without user consent or interaction, except when the authorization server

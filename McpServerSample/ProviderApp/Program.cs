@@ -1,5 +1,4 @@
 using System.Net;
-using System.Threading.RateLimiting;
 using Abblix.Jwt;
 using Abblix.Oidc;
 using Abblix.Oidc.Server.AspNetCore;
@@ -20,8 +19,6 @@ using Abblix.Oidc.Server.Model;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Configuration.Json;
 using ProviderApp;
 using UriBuilder = Abblix.Utils.UriBuilder;
 
@@ -41,35 +38,6 @@ var writeScope = configuration["McpServer:Scopes:Write"]
 // The client identifier URLs whose documents this provider fetches; unset, it fetches any the draft allows
 var allowedClientIdPrefixes = configuration.GetSection("ClientIdMetadataDocuments:AllowedClientIdPrefixes").Get<string[]>();
 
-const string clientSecretEncryptionKeySetting = "Provider:ClientSecretEncryptionKey";
-var clientSecretEncryptionKey = configuration[clientSecretEncryptionKeySetting];
-if (string.IsNullOrWhiteSpace(clientSecretEncryptionKey))
-{
-    throw new InvalidOperationException(
-        $"{clientSecretEncryptionKeySetting} is not configured: set it to 32 random bytes, base64");
-}
-
-// The key in appsettings.json is published with the sample, so it keeps the stored secrets from nobody. It serves
-// development alone: anywhere else the value has to come from a source of the deployment's own, an environment
-// variable or a secret store, and the last provider holding the setting is the one whose value is used.
-var keySource = ((IConfigurationRoot)configuration).Providers.Last(provider => provider.TryGet(clientSecretEncryptionKeySetting, out _));
-if (!builder.Environment.IsDevelopment() && keySource is JsonConfigurationProvider { Source.Path: "appsettings.json" })
-{
-    throw new InvalidOperationException(
-        $"{clientSecretEncryptionKeySetting} comes from appsettings.json, which holds the key published with the " +
-        "sample and serves development only. Set your own, 32 random bytes in base64, through an environment " +
-        "variable or a secret store.");
-}
-
-// Open registration lets anyone create clients, so each address may register only so many in a window
-const string RegistrationRateLimit = "registration";
-var registrationPermits = configuration.GetValue<int?>("Registration:PermitLimit") is { } permits and > 0
-    ? permits
-    : throw new InvalidOperationException("Registration:PermitLimit has to be a positive number of registrations");
-var registrationWindow = TimeSpan.TryParse(configuration["Registration:Window"], out var window) && window > TimeSpan.Zero
-    ? window
-    : throw new InvalidOperationException("Registration:Window has to be a positive time span such as 00:01:00");
-
 var userStore = new TestUserStore(
     new TestUser(
         Subject: "1234567890",
@@ -79,7 +47,7 @@ var userStore = new TestUserStore(
 builder.Services.AddSingleton(userStore);
 builder.Services.AddSingleton<IUserInfoProvider>(userStore);
 
-// Any application can become a client, by registering itself or by naming its metadata document, so the user
+// Any application published under a trusted prefix can become a client by naming its metadata document, so the user
 // approves each authorization on the consent page, which names the client, where its name comes from, and the host
 // its redirect URI points to (the MCP specification asks the authorization server to display it).
 // ConsentPageDecisions says why no approval is remembered.
@@ -88,17 +56,12 @@ builder.Services.AddSingleton<IUserConsentsProvider>(services => services.GetReq
 
 var oidcServer = builder.Services.AddOidcServices(options =>
 {
-    // MCP clients have no relationship with this provider before they connect, so a client without a metadata
-    // document registers itself (RFC 7591). Registration without an initial access token is what lets it do that
-    // unattended; the library's default asks for one.
-    options.RequireInitialAccessToken = false;
-
     // #region new-client-options
     options.NewClientOptions = new NewClientOptions
     {
         // These are the library's defaults, written out so the sample shows the policy: an MCP client acts for a user
-        // through the authorization code flow, renewed by refresh tokens, so a registration asking for anything else,
-        // client_credentials included (a token for the MCP server with no user behind it), is refused.
+        // through the authorization code flow, renewed by refresh tokens, so a metadata document asking for anything
+        // else, client_credentials included (a token for the MCP server with no user behind it), gets only these.
         AllowedGrantTypes = [GrantTypes.AuthorizationCode, GrantTypes.RefreshToken],
 
         // Allowed gives MCP clients a refresh token without prompt=consent: they ask for offline_access without it,
@@ -106,7 +69,7 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         // answer on the consent page stands in for prompt=consent, so the assistant keeps working after its access token expires.
         OfflineAccess = OfflineAccess.Allowed,
 
-        // A client that registers itself may get a token for the task tracker and nothing else this provider
+        // A client known by its metadata document may get a token for the task tracker and nothing else this provider
         // protects, whatever it names: which resources a client reaches is the provider's policy, not the client's
         AllowedResources = [mcpResource],
     };
@@ -114,8 +77,8 @@ var oidcServer = builder.Services.AddOidcServices(options =>
 
 #pragma warning disable ABX9001 // Client ID Metadata Documents are experimental until the draft becomes an RFC
     // #region cimd-prefixes
-    // A client may name itself by the https URL of a metadata document it publishes instead of registering
-    // (draft-ietf-oauth-client-id-metadata-document-03). With prefixes set, the provider fetches only documents under
+    // A client names itself by the https URL of a metadata document it publishes, the only way a client becomes known
+    // here (draft-ietf-oauth-client-id-metadata-document-03). With prefixes set, the provider fetches only documents under
     // them, so a URL of an untrusted vendor is refused without a request leaving the provider; the user still
     // approves every client on the consent page.
     options.ClientIdMetadataDocuments = new ClientIdMetadataDocumentOptions
@@ -138,7 +101,7 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         Id = "main",
         Issuer = issuer,
 
-        // No pre-registered clients: every MCP client arrives by its metadata document or by dynamic registration
+        // No pre-registered clients, and no registration endpoint: every MCP client arrives by its metadata document
         Clients = [],
 
         LoginUri = new Uri("/Auth/Login", UriKind.Relative),
@@ -148,7 +111,7 @@ var oidcServer = builder.Services.AddOidcServices(options =>
 
         // The task tracker's MCP server as a protected resource, with a scope for reading the employee's tasks and
         // one for changing them. A client naming it in the resource parameter gets an access token whose audience
-        // is exactly this URI, which is what the MCP server checks. Registration accepts a scope a resource declares.
+        // is exactly this URI, which is what the MCP server checks.
         Resources =
         [
             new ResourceDefinition(
@@ -158,23 +121,15 @@ var oidcServer = builder.Services.AddOidcServices(options =>
         ],
 
         SigningKeys = [JsonWebKeyFactory.CreateRsa(PublicKeyUsages.Signature)],
-
-        // The key each issued client_secret is also kept encrypted with, so a client reading its registration
-        // (RFC 7592 section 3) gets its secret back. A tenant serving registration does not start without one.
-        ClientSecretEncryption = new ClientSecretEncryptionSettings { Key = clientSecretEncryptionKey },
     });
 });
 
 #pragma warning disable ABX9001
 // Resolves a client_id that is an https URL by fetching its document through the library's outbound guard, and
 // advertises client_id_metadata_document_supported in the metadata. What such a client may ask for is bounded by
-// NewClientOptions above, as for a client that registers itself.
+// NewClientOptions above.
 oidcServer.AddClientIdMetadataDocuments();
 #pragma warning restore ABX9001
-
-// Serves the registration endpoint and advertises it as registration_endpoint in the metadata; without this
-// call the provider has no registration endpoint at all.
-builder.Services.AddDynamicClientRegistration();
 
 builder.Services.AddAuthentication().AddCookie();
 
@@ -184,26 +139,6 @@ builder.Services.AddAntiforgery();
 builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
-
-// Registrations are counted per client address; every other OIDC endpoint passes unlimited. The registration endpoint
-// is recognised by the address the library publishes for it.
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy(RegistrationRateLimit, context =>
-    {
-        var registration = context.RequestServices.GetRequiredService<IOidcEndpointResolver>()
-            .Resolve(OidcEndpoints.RegisterClient)!;
-
-        // The published address includes the path base the host may be mounted under, so the request's does too
-        var path = context.Request.PathBase.Add(context.Request.Path);
-        return HttpMethods.IsPost(context.Request.Method) && path == registration.AbsolutePath
-            ? RateLimitPartition.GetFixedWindowLimiter(
-                context.Connection.RemoteIpAddress?.ToString() ?? "",
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = registrationPermits, Window = registrationWindow })
-            : RateLimitPartition.GetNoLimiter("");
-    });
-});
 
 var app = builder.Build();
 
@@ -222,10 +157,7 @@ app.UseRouting();
 app.UseCors();
 app.UseAuthorization();
 
-// After routing, so the policy sees which endpoint a request reached
-app.UseRateLimiter();
-
-app.MapOidcEndpoints().RequireRateLimiting(RegistrationRateLimit);
+app.MapOidcEndpoints();
 
 app.MapGet("/Auth/Login", (string? request_uri, IAntiforgery antiforgery, HttpContext context) =>
     Results.Content(LoginPage(antiforgery.GetAndStoreTokens(context), request_uri, error: null), "text/html"));
@@ -381,22 +313,16 @@ static string ConsentPage(
     Uri mcpResource,
     string mcpResourceName)
 {
-    // Every value below was chosen by whoever registered the client, so each is encoded before it reaches the page
+    // Every value below was chosen by whoever published the client's metadata document, so each is encoded before it
+    // reaches the page
     var client = WebUtility.HtmlEncode(clientName ?? request.ClientId ?? "");
     var clientId = WebUtility.HtmlEncode(request.ClientId ?? "");
     var redirectUri = WebUtility.HtmlEncode(request.RedirectUri?.OriginalString ?? "");
 
-    // The provider assigns the client_id of every client that registers, so no registered client has one that is an
-    // https URL, and a client_id written as one is the address of a metadata document. Its name is the document's
-    // claim; the host it is published on is the one thing the provider checked (draft-ietf-oauth-client-id-metadata-
-    // document-03 section 10.10). The URL is recognised the way the library recognises a client identifier URL,
-    // character for character.
-    var origin = request.ClientId is { } id &&
-                 id.StartsWith("https://", StringComparison.Ordinal) &&
-                 Uri.TryCreate(id, UriKind.Absolute, out var documentUrl) &&
-                 string.Equals(documentUrl.AbsoluteUri, id, StringComparison.Ordinal)
-        ? $"its description, published at <b>{WebUtility.HtmlEncode(documentUrl.Authority)}</b>, names it so"
-        : "it registered itself with this provider under that name";
+    // Every client of this provider is known by its metadata document, so its client_id is the document's https URL.
+    // Its name is the document's claim; the host it is published on is the one thing the provider checked
+    // (draft-ietf-oauth-client-id-metadata-document-03 section 10.10).
+    var documentHost = WebUtility.HtmlEncode(new Uri(request.ClientId!).Authority);
 
     // The MCP specification: authorization servers "SHOULD display additional warnings for localhost-only redirect
     // URIs". Any program on the user's computer can listen on a loopback port, so the code may reach one the user
@@ -426,7 +352,7 @@ static string ConsentPage(
             <h1>Allow {client}?</h1>
             <p><b>{client}</b> asks to act for you.</p>
             <ul>
-                <li>Asked by: the application <b>{client}</b>; {origin} (client ID <code>{clientId}</code>)</li>
+                <li>Asked by: the application <b>{client}</b>; its description, published at <b>{documentHost}</b>, names it so (client ID <code>{clientId}</code>)</li>
                 <li>The code goes to: <code>{redirectUri}</code>, the redirect address {client} gave{redirectWhere}</li>
                 <li>Access to: {resources}</li>
             </ul>
