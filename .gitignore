@@ -69,6 +69,8 @@ pids
 # Ignore dotenv environment variables file
 .env
 .env.test
+# The MCP sample's default compose profile, no secret: docker compose reads it next to compose.yaml
+!McpServerSample/.env
 
 # Ignore npm/bower debug log
 npm-debug.log*

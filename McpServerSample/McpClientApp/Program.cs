@@ -56,9 +56,13 @@ var useMetadataDocument = configuration["Registration"] switch
 // the assistant on the employee's computer, which receives the provider's redirect at the origin of the redirect URI
 builder.WebHost.UseUrls(clientId.GetLeftPart(UriPartial.Authority), redirectUri.GetLeftPart(UriPartial.Authority));
 
+// The browser run shows its steps on the assistant's page as well as in the terminal
+var steps = configuration["SignIn"] == "browser" ? new StepLog() : null;
+Action<string> say = steps is null ? Console.WriteLine : steps.Add;
+
 ISignIn signIn = configuration["SignIn"] switch
 {
-    "browser" => new BrowserSignIn(clientName, redirectUri),
+    "browser" => new BrowserSignIn(steps!),
     "headless" => new HeadlessSignIn(
         redirectUri,
         configuration["HeadlessSignIn:Email"]
@@ -75,66 +79,54 @@ ISignIn signIn = configuration["SignIn"] switch
     var other => throw new InvalidOperationException($"SignIn is '{other}'; use browser or headless"),
 };
 
+// The assistant's page posts its forms with an antiforgery token
+builder.Services.AddAntiforgery();
+
 var app = builder.Build();
 
 // Served as application/json, the type the provider names in its Accept header (draft section 6). The line it prints
 // shows the provider fetching it.
 app.MapGet(clientId.AbsolutePath, (HttpRequest request) =>
 {
-    Console.WriteLine($"Served the metadata document (Accept: {request.Headers.Accept})");
+    say($"Served the metadata document (Accept: {request.Headers.Accept})");
     return Results.Text(documentText, "application/json");
 });
 
+var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+say(useMetadataDocument
+    ? $"{clientName} identifies itself as {clientId}"
+    : $"{clientName} registers itself at the provider");
+
 if (signIn is BrowserSignIn browser)
-    app.MapGet(redirectUri.AbsolutePath, browser.Receive);
+{
+    // The SDK's requests to the tracker and to the provider go through one handler, which shows them on the page
+    var traffic = new TrackerTraffic(steps!);
+    var page = new AssistantPage(
+        clientName,
+        configuration["Mcp:Name"] ?? throw new InvalidOperationException("Mcp:Name is not configured"),
+        mcpServer,
+        newTaskTitle,
+        signInTimeout,
+        steps!,
+        browser,
+        traffic,
+        tokens => new HttpClientTransport(
+            new HttpClientTransportOptions { Endpoint = mcpServer, OAuth = OAuth(tokens) },
+            new HttpClient(traffic, disposeHandler: false),
+            loggerFactory,
+            ownsHttpClient: true),
+        loggerFactory);
+    page.Map(app, redirectUri);
+
+    await app.StartAsync();
+    Console.WriteLine($"Open {redirectUri.GetLeftPart(UriPartial.Authority)}/ in a browser; Ctrl+C stops the assistant.");
+    await app.WaitForShutdownAsync();
+    return;
+}
 
 await app.StartAsync();
 
-var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-var oauth = new ClientOAuthOptions
-{
-    RedirectUri = redirectUri,
-
-    // The SDK sends this URL as the client_id when the provider's metadata says client_id_metadata_document_supported,
-    // and registers the client otherwise (MCP authorization, client registration). Without it the client always
-    // registers.
-    ClientMetadataDocumentUri = useMetadataDocument ? clientId : null,
-
-    DynamicClientRegistration = new DynamicClientRegistrationOptions
-    {
-        ClientName = clientName,
-        ResponseDelegate = (response, _) =>
-        {
-            Console.WriteLine($"Registered dynamically, client_id {response.ClientId}");
-            return Task.CompletedTask;
-        },
-    },
-
-    // Known by its document, the assistant takes the scope the tracker names, tasks.read, and asks for tasks.write only
-    // when a call needs it (step-up authorization). Kept to the configured scopes, a refusal for a missing scope is
-    // final after one more sign-in with the same scopes: the SDK always tries one step-up, and stops when the next refusal
-    // names no scope it has not asked for. Registering itself, it asks up front for the scopes it registers with.
-    ScopeSelector = candidates => (requestedScopes, useMetadataDocument) switch
-    {
-        ({ } limit, _) => candidates?.Where(scope => limit.Contains(scope) || scope == "offline_access"),
-        (null, true) => candidates,
-        (null, false) => (candidates ?? []).Union(registrationScopes),
-    },
-
-    // The handler returns the code together with state and iss, so the SDK checks both: section 7 of the draft makes iss
-    // mandatory in the authorization response. It runs once at the start and again whenever the tracker asks for a
-    // scope the token lacks, so the line it prints shows what each sign-in asks for.
-    AuthorizationCallbackHandler = (context, cancellationToken) =>
-    {
-        var scope = System.Web.HttpUtility.ParseQueryString(context.AuthorizationUri.Query)["scope"];
-        Console.WriteLine($"Asking the employee to sign in and allow: {scope}");
-        return signIn.AuthorizeAsync(context, cancellationToken);
-    },
-};
-
-Console.WriteLine(useMetadataDocument
-    ? $"{clientName} identifies itself as {clientId}"
-    : $"{clientName} registers itself at the provider");
+var oauth = OAuth(null);
 
 await using var transport = new HttpClientTransport(
     new HttpClientTransportOptions { Endpoint = mcpServer, OAuth = oauth },
@@ -208,6 +200,50 @@ catch (Exception exception) when (exception is McpException or HttpRequestExcept
 
 await app.StopAsync();
 return;
+
+// The SDK keeps its tokens in tokens when given, in a cache of its own otherwise
+ClientOAuthOptions OAuth(ITokenCache? tokens) => new()
+{
+    RedirectUri = redirectUri,
+
+    // The SDK sends this URL as the client_id when the provider's metadata says client_id_metadata_document_supported,
+    // and registers the client otherwise (MCP authorization, client registration). Without it the client always
+    // registers.
+    ClientMetadataDocumentUri = useMetadataDocument ? clientId : null,
+
+    DynamicClientRegistration = new DynamicClientRegistrationOptions
+    {
+        ClientName = clientName,
+        ResponseDelegate = (response, _) =>
+        {
+            say($"Registered dynamically, client_id {response.ClientId}");
+            return Task.CompletedTask;
+        },
+    },
+
+    // Known by its document, the assistant takes the scope the tracker names, tasks.read, and asks for tasks.write only
+    // when a call needs it (step-up authorization). Kept to the configured scopes, a refusal for a missing scope is
+    // final after one more sign-in with the same scopes: the SDK always tries one step-up, and stops when the next refusal
+    // names no scope it has not asked for. Registering itself, it asks up front for the scopes it registers with.
+    ScopeSelector = candidates => (requestedScopes, useMetadataDocument) switch
+    {
+        ({ } limit, _) => candidates?.Where(scope => limit.Contains(scope) || scope == "offline_access"),
+        (null, true) => candidates,
+        (null, false) => (candidates ?? []).Union(registrationScopes),
+    },
+
+    // The handler returns the code together with state and iss, so the SDK checks both: section 7 of the draft makes iss
+    // mandatory in the authorization response. It runs once at the start and again whenever the tracker asks for a
+    // scope the token lacks, so the line it prints shows what each sign-in asks for.
+    AuthorizationCallbackHandler = (context, cancellationToken) =>
+    {
+        var scope = System.Web.HttpUtility.ParseQueryString(context.AuthorizationUri.Query)["scope"];
+        say($"Asking the employee to sign in and allow: {scope}");
+        return signIn.AuthorizeAsync(context, cancellationToken);
+    },
+
+    TokenCache = tokens,
+};
 
 // create_task answers with the task as structured content
 static int TaskId(CallToolResult created)

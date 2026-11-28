@@ -1,0 +1,3 @@
+# Build outputs of a local dotnet run: a restore made on the host breaks the restore inside the image
+**/bin/
+**/obj/

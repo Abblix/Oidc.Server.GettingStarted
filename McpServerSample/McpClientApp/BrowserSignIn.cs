@@ -1,66 +1,123 @@
-using System.Net;
+using System.Web;
 using ModelContextProtocol.Authentication;
 
 namespace McpClientApp;
 
 /// <summary>
-/// Prints the authorization URL for the user to open in a browser and waits for the provider's redirect, which this
-/// app receives on its loopback redirect URI.
+/// Holds a sign-in the SDK asks for until the user's browser returns from the provider to the redirect URI: the
+/// assistant's page sends the browser to <see cref="PendingUri"/>, and <see cref="Receive"/> hands the SDK what the
+/// provider sent back.
 /// </summary>
-public sealed class BrowserSignIn(string clientName, Uri redirectUri) : ISignIn
+public sealed class BrowserSignIn(StepLog log) : ISignIn
 {
-    // One per sign-in: the SDK signs in again when the tracker asks for a scope the token lacks, and that sign-in waits
-    // for a redirect of its own, not the first one's
-    private TaskCompletionSource<AuthorizationResult> _response = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Lock _lock = new();
+    private TaskCompletionSource<AuthorizationResult>? _response;
+    private TaskCompletionSource _requested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly HashSet<string> _askedScopes = [];
+
+    /// <summary>
+    /// The authorization URL of the sign-in waiting for the browser, or none.
+    /// </summary>
+    public Uri? PendingUri { get; private set; }
+
+    /// <summary>
+    /// Completes when the SDK next asks for a sign-in, so a request that started a call can send the browser on while
+    /// the call waits for it.
+    /// </summary>
+    public Task Requested
+    {
+        get
+        {
+            lock (_lock)
+                return _requested.Task;
+        }
+    }
 
     public async Task<AuthorizationResult?> AuthorizeAsync(
         AuthorizationCallbackContext context,
         CancellationToken cancellationToken)
     {
         var response = new TaskCompletionSource<AuthorizationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _response = response;
-        Console.WriteLine("Open this address in a browser and sign in:");
-        Console.WriteLine(context.AuthorizationUri);
-        Console.WriteLine("An error page there instead of the login page means the provider refused the request, and " +
-                          "its log says why; the provider does not redirect back after that, so stop this app with Ctrl+C.");
-        return await response.Task.WaitAsync(cancellationToken);
+        TaskCompletionSource requested;
+        lock (_lock)
+        {
+            _response = response;
+            PendingUri = context.AuthorizationUri;
+            var scope = HttpUtility.ParseQueryString(context.AuthorizationUri.Query)["scope"] ?? "";
+            _askedScopes.UnionWith(scope.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            requested = _requested;
+            _requested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        log.Add($"Waiting for the browser to sign in at {context.AuthorizationUri}");
+        requested.SetResult();
+        try
+        {
+            return await response.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (_response == response)
+                {
+                    _response = null;
+                    PendingUri = null;
+                }
+            }
+        }
     }
 
     /// <summary>
-    /// The endpoint at <see cref="redirectUri"/>: hands the response to the waiting authorization and tells the user
-    /// to go back to the terminal.
+    /// Whether a sign-in since <see cref="ForgetAskedScopes"/> asked the provider for <paramref name="scope"/>, whatever
+    /// the employee answered.
     /// </summary>
-    public IResult Receive(HttpRequest request)
+    public bool HasAsked(string scope)
     {
-        var query = request.Query;
-        if (query["error"].ToString() is { Length: > 0 } error)
+        lock (_lock)
+            return _askedScopes.Contains(scope);
+    }
+
+    /// <summary>
+    /// Starts counting the scopes asked for afresh, as a new connection's SDK does.
+    /// </summary>
+    public void ForgetAskedScopes()
+    {
+        lock (_lock)
+            _askedScopes.Clear();
+    }
+
+    /// <summary>
+    /// Hands the provider's redirect to the waiting sign-in: the code with state and iss, or the error. Returns false
+    /// when no sign-in waits, as for a redirect opened again after its sign-in ended.
+    /// </summary>
+    public bool Receive(IQueryCollection query)
+    {
+        TaskCompletionSource<AuthorizationResult>? response;
+        lock (_lock)
         {
-            _response.TrySetException(new InvalidOperationException(
-                $"The provider answered {error}: {query["error_description"]}"));
-            return Page($"The provider refused the request: {error}");
+            response = _response;
+            _response = null;
+            PendingUri = null;
         }
 
-        _response.TrySetResult(new AuthorizationResult
+        if (response is null)
+            return false;
+
+        if (query["error"].ToString() is { Length: > 0 } error)
+        {
+            log.Add($"The provider redirected back with {error}: {query["error_description"]}");
+            response.TrySetException(new InvalidOperationException($"The provider answered {error}: {query["error_description"]}"));
+            return true;
+        }
+
+        log.Add("The provider redirected back with an authorization code");
+        response.TrySetResult(new AuthorizationResult
         {
             Code = query["code"].ToString(),
             State = query["state"].ToString(),
             Iss = query["iss"].ToString() is { Length: > 0 } iss ? iss : null,
         });
-        return Page("Signed in. The assistant goes on in the terminal; this tab can be closed.");
+        return true;
     }
-
-    private IResult Page(string message)
-        => Results.Content(
-            $"""
-             <!DOCTYPE html>
-             <html>
-             <head><title>{WebUtility.HtmlEncode(clientName)}</title></head>
-             <body>
-                 <h1>{WebUtility.HtmlEncode(clientName)}</h1>
-                 <p>{WebUtility.HtmlEncode(message)}</p>
-                 <p>Redirect URI: {WebUtility.HtmlEncode(redirectUri.ToString())}</p>
-             </body>
-             </html>
-             """,
-            "text/html");
 }
