@@ -49,11 +49,12 @@ Three apps, one machine:
 You need ports 5007, 5008 and 5010 free. From `McpServerSample`, export the development certificate once, so the containers serve it:
 
 ```shell
+mkdir certificate
 dotnet dev-certs https --export-path certificate/localhost.crt --format PEM --no-password
 docker compose up --build
 ```
 
-On Linux and macOS, make the exported files readable by the containers before `docker compose up`: `chmod a+r certificate/*`.
+On Linux and macOS, run `chmod a+r certificate/*` after the export and before `docker compose up`, so the containers can read the files. Create `certificate` before the first `docker compose up`: on Linux, Docker creates a missing folder owned by root, and the export can no longer write into it.
 
 When the log shows `Open http://127.0.0.1:5010/ in a browser`:
 

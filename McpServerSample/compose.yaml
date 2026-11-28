@@ -34,6 +34,7 @@ services:
       - >-
         test -r /etc/mcp-sample/certificate/localhost.crt && test -r /etc/mcp-sample/certificate/localhost.key
         || { echo 'No readable certificate/localhost.crt and localhost.key next to compose.yaml; from that folder run:
+        mkdir certificate (if missing), then
         dotnet dev-certs https --export-path certificate/localhost.crt --format PEM --no-password
         (on Linux and macOS add: chmod a+r certificate/*)'; exit 1; };
         exec dotnet ProviderApp.dll
