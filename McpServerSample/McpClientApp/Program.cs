@@ -26,13 +26,8 @@ var signInTimeout = TimeSpan.TryParse(configuration["Client:SignInTimeout"], out
 // The scopes the assistant is limited to, or none configured to take whatever the tracker asks for
 var requestedScopes = configuration.GetSection("Scopes").Get<string[]>();
 
-// A client that registers itself names its scopes in the registration, and the provider holds it to them, so a scope
-// asked for later could not be added by step-up; such a client registers, and asks, for every scope it will use
-var registrationScopes = configuration.GetSection("RegistrationScopes").Get<string[]>()
-                         ?? throw new InvalidOperationException("RegistrationScopes is not configured");
-
-// The document is the one description of the assistant: its URL is the client_id, and the name and the redirect URI
-// a dynamic registration sends are read from it as well
+// The document is the one description of the assistant: its URL is the client_id, and its name and redirect URI are
+// read from it as well
 var documentPath = Path.Combine(AppContext.BaseDirectory, documentFile);
 var documentText = await File.ReadAllTextAsync(documentPath);
 var document = JsonNode.Parse(documentText) as JsonObject
@@ -44,13 +39,6 @@ var redirectUri = AbsoluteUri(
     document["redirect_uris"] is JsonArray { Count: > 0 } redirectUris ? DocumentString(redirectUris, 0) : null,
     $"the first of redirect_uris in {documentPath}",
     Uri.UriSchemeHttp);
-
-var useMetadataDocument = configuration["Registration"] switch
-{
-    "metadata-document" => true,
-    "dynamic" => false,
-    var other => throw new InvalidOperationException($"Registration is '{other}'; use metadata-document or dynamic"),
-};
 
 // This app stands for the vendor's web site, which publishes the document at the origin of its client_id, and for
 // the assistant on the employee's computer, which receives the provider's redirect at the origin of the redirect URI
@@ -93,9 +81,7 @@ app.MapGet(clientId.AbsolutePath, (HttpRequest request) =>
 });
 
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-say(useMetadataDocument
-    ? $"{clientName} identifies itself as {clientId}"
-    : $"{clientName} registers itself at the provider");
+say($"{clientName} identifies itself as {clientId}");
 
 if (signIn is BrowserSignIn browser)
 {
@@ -206,31 +192,17 @@ ClientOAuthOptions OAuth(ITokenCache? tokens) => new()
 {
     RedirectUri = redirectUri,
 
-    // The SDK sends this URL as the client_id when the provider's metadata says client_id_metadata_document_supported,
-    // and registers the client otherwise (MCP authorization, client registration). Without it the client always
-    // registers.
-    ClientMetadataDocumentUri = useMetadataDocument ? clientId : null,
+    // The SDK sends this URL as the client_id when the provider's metadata says client_id_metadata_document_supported
+    // (MCP authorization, client registration); this provider admits clients by their documents alone
+    ClientMetadataDocumentUri = clientId,
 
-    DynamicClientRegistration = new DynamicClientRegistrationOptions
-    {
-        ClientName = clientName,
-        ResponseDelegate = (response, _) =>
-        {
-            say($"Registered dynamically, client_id {response.ClientId}");
-            return Task.CompletedTask;
-        },
-    },
-
-    // Known by its document, the assistant takes the scope the tracker names, tasks.read, and asks for tasks.write only
-    // when a call needs it (step-up authorization). Kept to the configured scopes, a refusal for a missing scope is
-    // final after one more sign-in with the same scopes: the SDK always tries one step-up, and stops when the next refusal
-    // names no scope it has not asked for. Registering itself, it asks up front for the scopes it registers with.
-    ScopeSelector = candidates => (requestedScopes, useMetadataDocument) switch
-    {
-        ({ } limit, _) => candidates?.Where(scope => limit.Contains(scope) || scope == "offline_access"),
-        (null, true) => candidates,
-        (null, false) => (candidates ?? []).Union(registrationScopes),
-    },
+    // The assistant takes the scope the tracker names, tasks.read, and asks for tasks.write only when a call needs it
+    // (step-up authorization). Kept to the configured scopes, a refusal for a missing scope is final after one more
+    // sign-in with the same scopes: the SDK always tries one step-up, and stops when the next refusal names no scope it
+    // has not asked for.
+    ScopeSelector = candidates => requestedScopes is { } limit
+        ? candidates?.Where(scope => limit.Contains(scope) || scope == "offline_access")
+        : candidates,
 
     // The handler returns the code together with state and iss, so the SDK checks both: section 7 of the draft makes iss
     // mandatory in the authorization response. It runs once at the start and again whenever the tracker asks for a
